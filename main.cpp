@@ -44,10 +44,7 @@ class Board{
 
         void init(){
             resetBoard();
-
-            
-
-            
+            calculateLeapers(); // Knight and King Movement mask calculation            
         }
 
         void calculateLeapers(){
@@ -65,15 +62,21 @@ class Board{
 
                 uint64_t kingMoves = 0;
 
-                kingMoves |= (startingSquare << 8) | (startingSquare >> 8);
-                kingMoves |= ((startingSquare & notHFile) << 1) | ((startingSquare & notAFile) >> 1);
-                kingMoves |= ((startingSquare & notHFile) >> 7) | ((startingSquare & notAFile) >> 9);
+                kingMoves |= (startingSquare << 8) | (startingSquare >> 8); // N, S
+                kingMoves |= ((startingSquare & notHFile) << 1) | ((startingSquare & notAFile) >> 1); // E, W
+                kingMoves |= ((startingSquare & notHFile) << 9) | ((startingSquare & notAFile) << 7); // NE, NW
+                kingMoves |= ((startingSquare & notHFile) >> 7) | ((startingSquare & notAFile) >> 9); // SE, S
                 
+                kingMoveMask[square] = kingMoves;
 
+                uint64_t knightMoves = 0;
+
+                knightMoves |= ((startingSquare & notHFile) << 17) | ((startingSquare & notGHFile) << 10) | ((startingSquare & notGHFile) >> 6) | ((startingSquare & notHFile) >> 15);
+                knightMoves |= ((startingSquare & notAFile) << 15) | ((startingSquare & notABFile) << 6) | ((startingSquare & notABFile) >> 10) | ((startingSquare & notAFile) >> 17);
+
+                knightMoveMask[square] = knightMoves;
             }
-
         }
-
 
         void printBitBoard(uint64_t bitboard){
 
