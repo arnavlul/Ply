@@ -78,6 +78,7 @@ class Board{
             }
         }
 
+        
         void printBitBoard(uint64_t bitboard){
 
             for(int rank=7; rank >=0; rank--){
