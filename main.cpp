@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <cstdint>
+#include <bit>
 using namespace std;
 
 class Board{
@@ -95,7 +96,7 @@ class Board{
             cout << "  A  B  C  D  E  F  G  H";
         }
 
-        void generateMoves(){
+        void generateMoves(bool side){ // 1 for white, 0 for black
 
             uint64_t allWhite = whitePawn | whiteKing | whiteQueen | whiteBishop | whiteKnight | whiteRook;
             uint64_t allBlack = blackPawn | blackKing | blackQueen | blackBishop | blackKnight | blackRook;
@@ -103,8 +104,28 @@ class Board{
             uint64_t occupied = allWhite | allBlack;
             uint64_t unoccupied = ~occupied;
 
+        // Calculating for rooks
+            if(side){
+                uint64_t copywhiteRook = whiteRook;
+                uint64_t rookAttackMask = 0;
+                while(copywhiteRook > 0){
+                    int rookPos = __builtin_ctzll(copywhiteRook);
+                    int rank = rookPos / 8;
+                    int file = rookPos % 8;
 
+                    while(true){
 
+                        
+
+                    }
+                    
+                    
+                    
+                }
+            }
+            else{
+            
+            }
         }
     
 };
