@@ -79,6 +79,155 @@ class Board{
             }
         }
 
+        uint64_t generateRookAttackMask(uint64_t rookBoard, uint64_t occupied){
+
+            uint64_t rank8 = 0xFF00000000000000ULL;
+            uint64_t rank1 = 0x00000000000000FFULL;
+            uint64_t fileH = 0x8080808080808080ULL;
+            uint64_t fileA = 0x0101010101010101ULL;
+
+            uint64_t rookAttackMask = 0;
+            while(rookBoard > 0){
+                int index = __builtin_ctzll(rookBoard);
+                uint64_t pos = (1ULL << index);
+
+                while(!(pos & rank8)){ // North      
+                    pos <<= 8;                    
+                    rookAttackMask |= pos;
+                    if(pos & occupied) break;
+                }
+                pos = (1ULL << index);
+                while(!(pos & rank1)){ // South
+                    pos >>= 8;
+                    rookAttackMask |= pos;
+                    if(pos & occupied) break;
+                }
+                pos = (1ULL << index);
+                while(!(pos & fileH)){ // East
+                    pos <<= 1;
+                    rookAttackMask |= pos;
+                    if(pos & occupied) break;
+                }
+                pos = (1ULL << index);
+                while(!(pos & fileA)){ // West
+                    pos >>=  1;
+                    rookAttackMask |= pos;
+                    if(pos & occupied) break;
+                }
+                rookBoard &= (rookBoard-1);
+            }
+            
+            return rookAttackMask;        
+        }
+
+        uint64_t generateBishopAttackMask(uint64_t bishopBoard, uint64_t occupied){
+
+            uint64_t rank8 = 0xFF00000000000000ULL;
+            uint64_t rank1 = 0x00000000000000FFULL;
+            uint64_t fileH = 0x8080808080808080ULL;
+            uint64_t fileA = 0x0101010101010101ULL;
+
+            uint64_t bishopAttackMask = 0;
+            while(bishopBoard > 0){
+                int index = __builtin_ctzll(bishopBoard);
+                uint64_t pos = (1ULL << index);
+
+                while(!(pos & rank8) && !(pos & fileH)){ // North-East
+                    pos <<= 9;
+                    bishopAttackMask |= pos;
+                    if(pos & occupied) break;
+                }
+
+                pos = (1ULL << index);
+                while(!(pos & fileA) && !(pos & rank8)){ // North-West
+                    pos <<= 7;
+                    bishopAttackMask |= pos;
+                    if(pos & occupied) break;
+                }
+
+                pos = (1ULL << index);
+                while(!(pos & fileH) && !(pos & rank1)){ // South-East
+                    pos >>= 7;
+                    bishopAttackMask |= pos;
+                    if(pos & occupied) break;
+                }   
+
+                 pos = (1ULL << index);
+                while(!(pos & fileA) && !(pos & rank1)){ // South-West
+                    pos >>= 9;
+                    bishopAttackMask |= pos;
+                    if(pos & occupied) break;
+                }  
+
+                bishopBoard &= (bishopBoard - 1);
+            }
+            
+            return bishopAttackMask;
+        }
+
+        uint64_t generateKnightAttackMask(uint64_t knightBoard){
+
+            uint64_t knightAttackMask = 0;
+            while(knightBoard > 0){
+                int index = __builtin_ctzll(knightBoard);
+
+                knightAttackMask |= knightMoveMask[index];
+                knightBoard &= (knightBoard - 1);
+            }
+            
+            return knightAttackMask;
+        }
+
+        uint64_t generateKingAttackMask(uint64_t kingBoard){
+            
+            uint64_t kingAttackMask = 0;
+            while(kingBoard > 0){
+                int index = __builtin_ctzll(kingBoard);
+
+                kingAttackMask |= kingMoveMask[index];
+                kingBoard &= (kingBoard - 1);
+            }
+
+            return kingAttackMask;
+        }
+
+        void generateMoves(bool side){ // 1 for white, 0 for black
+
+            uint64_t allWhite = whitePawn | whiteKing | whiteQueen | whiteBishop | whiteKnight | whiteRook;
+            uint64_t allBlack = blackPawn | blackKing | blackQueen | blackBishop | blackKnight | blackRook;
+
+            uint64_t occupied = allWhite | allBlack;
+            uint64_t unoccupied = ~occupied;
+
+            
+            uint64_t rookAttackMask;
+            uint64_t bishopAttackMask;
+            uint64_t queenAttackMask;
+            uint64_t knightAttackMask;
+            uint64_t kingAttackMask;
+            uint64_t pawnAttackMask;
+
+            if(side){
+
+                rookAttackMask = generateRookAttackMask(whiteRook, occupied);
+                rookAttackMask &= ~allWhite;
+
+                bishopAttackMask = generateBishopAttackMask(whiteBishop, occupied);
+                bishopAttackMask &= ~allWhite;
+
+                uint64_t queenAttackMask1 = generateRookAttackMask(whiteQueen, occupied);
+                uint64_t queenAttackMask2 = generateBishopAttackMask(whiteQueen, occupied);
+                queenAttackMask = (queenAttackMask1 | queenAttackMask2) & (~allWhite);
+
+                knightAttackMask = generateKnightAttackMask(whiteKnight);
+                knightAttackMask &= ~allWhite;
+
+                kingAttackMask = generateKingAttackMask(whiteKing);
+                kingAttackMask &= ~allWhite;
+            }    
+
+        }
+
         void printBitBoard(uint64_t bitboard){
 
             for(int rank=7; rank >=0; rank--){
@@ -94,38 +243,6 @@ class Board{
                 cout << "\n";
             }
             cout << "  A  B  C  D  E  F  G  H";
-        }
-
-        void generateMoves(bool side){ // 1 for white, 0 for black
-
-            uint64_t allWhite = whitePawn | whiteKing | whiteQueen | whiteBishop | whiteKnight | whiteRook;
-            uint64_t allBlack = blackPawn | blackKing | blackQueen | blackBishop | blackKnight | blackRook;
-
-            uint64_t occupied = allWhite | allBlack;
-            uint64_t unoccupied = ~occupied;
-
-        // Calculating for rooks
-            if(side){
-                uint64_t copywhiteRook = whiteRook;
-                uint64_t rookAttackMask = 0;
-                while(copywhiteRook > 0){
-                    int rookPos = __builtin_ctzll(copywhiteRook);
-                    int rank = rookPos / 8;
-                    int file = rookPos % 8;
-
-                    while(true){
-
-                        
-
-                    }
-                    
-                    
-                    
-                }
-            }
-            else{
-            
-            }
         }
     
 };
