@@ -2,6 +2,7 @@
 #include <string>
 #include <cstdint>
 #include <bit>
+#include <vector>
 using namespace std;
 
 class Board{
@@ -79,45 +80,62 @@ class Board{
             }
         }
 
-        uint64_t generateRookAttackMask(uint64_t rookBoard, uint64_t occupied){
+        uint16_t package_move(int from, int to){
+
+            uint16_t moveRep = 0;
+            moveRep |= from;
+            moveRep |= (to << 6);
+            return moveRep;
+
+        }
+
+        void generateRookAttackMask(uint64_t rookBoard, const uint64_t occupied, const uint64_t friendly, vector<uint16_t>& moveset){
 
             uint64_t rank8 = 0xFF00000000000000ULL;
             uint64_t rank1 = 0x00000000000000FFULL;
             uint64_t fileH = 0x8080808080808080ULL;
             uint64_t fileA = 0x0101010101010101ULL;
 
-            uint64_t rookAttackMask = 0;
             while(rookBoard > 0){
-                int index = __builtin_ctzll(rookBoard);
-                uint64_t pos = (1ULL << index);
+                int from = __builtin_ctzll(rookBoard);
+                int copy = from;
+                while(!(copy & rank8)){
+                    copy += 8;
+                    if(copy & friendly) break;
+                    uint64_t move = package_move(from, copy);
+                    moveset.push_back(move);
+                    if(copy & occupied) break;
+                }
+               
+                copy = from;
+                while(!(copy & rank1)){
+                    copy -= 8;
+                    if(copy & friendly) break;
+                    uint64_t move = package_move(from, copy);
+                    moveset.push_back(move);
+                    if(copy & occupied) break;
+                }
 
-                while(!(pos & rank8)){ // North      
-                    pos <<= 8;                    
-                    rookAttackMask |= pos;
-                    if(pos & occupied) break;
+                copy = from;
+                while(!(copy & fileH)){
+                    copy += 1;
+                    if(copy & friendly) break;
+                    uint64_t move = package_move(from, copy);
+                    moveset.push_back(move);
+                    if(copy & occupied) break;
                 }
-                pos = (1ULL << index);
-                while(!(pos & rank1)){ // South
-                    pos >>= 8;
-                    rookAttackMask |= pos;
-                    if(pos & occupied) break;
+
+                copy = from;
+                while(!(copy & fileA)){
+                    copy -= 1;
+                    if(copy & friendly) break;
+                    uint64_t move = package_move(from, copy);
+                    moveset.push_back(move);
+                    if(copy & occupied) break;
                 }
-                pos = (1ULL << index);
-                while(!(pos & fileH)){ // East
-                    pos <<= 1;
-                    rookAttackMask |= pos;
-                    if(pos & occupied) break;
-                }
-                pos = (1ULL << index);
-                while(!(pos & fileA)){ // West
-                    pos >>=  1;
-                    rookAttackMask |= pos;
-                    if(pos & occupied) break;
-                }
-                rookBoard &= (rookBoard-1);
+                rookBoard &= (rookBoard - 1);
             }
             
-            return rookAttackMask;        
         }
 
         uint64_t generateBishopAttackMask(uint64_t bishopBoard, uint64_t occupied){
