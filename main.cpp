@@ -44,6 +44,42 @@ class Board{
 
         }
 
+        void init(){
+            resetBoard();
+            calculateLeapers(); // Knight and King Movement mask calculation            
+        }
+
+        void calculateLeapers(){
+
+            const uint64_t notAFile = 0xFEFEFEFEFEFEFEFEULL;
+            const uint64_t notHFile = 0x7F7F7F7F7F7F7F7FULL;
+            const uint64_t notABFile = 0xFCFCFCFCFCFCFCFCULL;
+            const uint64_t notGHFile = 0x3F3F3F3F3F3F3F3FULL;
+
+            for(int square=0; square<64; square++){
+
+                uint64_t startingSquare = 1ULL << square;
+
+                // Calculating king moves
+
+                uint64_t kingMoves = 0;
+
+                kingMoves |= (startingSquare << 8) | (startingSquare >> 8); // N, S
+                kingMoves |= ((startingSquare & notHFile) << 1) | ((startingSquare & notAFile) >> 1); // E, W
+                kingMoves |= ((startingSquare & notHFile) << 9) | ((startingSquare & notAFile) << 7); // NE, NW
+                kingMoves |= ((startingSquare & notHFile) >> 7) | ((startingSquare & notAFile) >> 9); // SE, S
+                
+                kingMoveMask[square] = kingMoves;
+
+                uint64_t knightMoves = 0;
+
+                knightMoves |= ((startingSquare & notHFile) << 17) | ((startingSquare & notGHFile) << 10) | ((startingSquare & notGHFile) >> 6) | ((startingSquare & notHFile) >> 15);
+                knightMoves |= ((startingSquare & notAFile) << 15) | ((startingSquare & notABFile) << 6) | ((startingSquare & notABFile) >> 10) | ((startingSquare & notAFile) >> 17);
+
+                knightMoveMask[square] = knightMoves;
+            }
+        }
+
         uint16_t package_move(int from, int to){
 
             uint16_t moveRep = 0;
@@ -156,25 +192,47 @@ class Board{
 
             generateRookMoves(queenBoard, occupied, friendly, moveset);
             generateBishopMoves(queenBoard, occupied, friendly, moveset);
-        }
-
-        void generateKnightAttackMask(uint64_t knightBoard, uint64_t friendly, vector<uint16_t> &moveset){
-
-            
 
         }
 
-        uint64_t generateKingAttackMask(uint64_t kingBoard){
-            
-            uint64_t kingAttackMask = 0;
-            while(kingBoard > 0){
-                int index = __builtin_ctzll(kingBoard);
+        void generateKnightMoves(uint64_t knightBoard, uint64_t friendly, vector<uint16_t> &moveset){
 
-                kingAttackMask |= kingMoveMask[index];
-                kingBoard &= (kingBoard - 1);
+            while(knightBoard > 0){
+                int from = __builtin_ctzll(knightBoard);
+
+                uint64_t this_knight = knightMoveMask[from];
+
+                uint64_t attacks = this_knight & ~friendly;
+
+                while(attacks){
+                    int to = __builtin_ctzll(attacks);
+                    uint16_t move = package_move(from, to);
+                    moveset.push_back(move);
+                    attacks &= (attacks - 1);
+                }
+
+                knightBoard &= (knightBoard - 1);
+            }
+            
+        }
+
+        void generateKingMoves(uint64_t kingBoard, uint64_t friendly, vector<uint16_t> & moveset){
+            
+            if(kingBoard == 0) return; // Somehow no king
+
+            int from = __builtin_ctzll(kingBoard); // No need for loop like knight, coz only ever one king
+
+            uint64_t attacks = kingMoveMask[from];
+            attacks &= ~friendly;
+
+            while(attacks){
+                int to = __builtin_ctzll(attacks);
+                uint16_t move = package_move(from, to);
+                moveset.push_back(move);
+                
+                attacks &= (attacks - 1);
             }
 
-            return kingAttackMask;
         }
 
         void generateMoves(bool side){ // 1 for white, 0 for black
@@ -186,31 +244,26 @@ class Board{
             uint64_t unoccupied = ~occupied;
 
             
-            uint64_t rookAttackMask;
-            uint64_t bishopAttackMask;
-            uint64_t queenAttackMask;
-            uint64_t knightAttackMask;
-            uint64_t kingAttackMask;
-            uint64_t pawnAttackMask;
+            vector<uint16_t> moveSet;
 
-            if(side){
+            if(side){ // White
 
-                rookAttackMask = generateRookAttackMask(whiteRook, occupied);
-                rookAttackMask &= ~allWhite;
+                generateRookMoves(whiteRook, occupied, allWhite, moveSet);
+                generateBishopMoves(whiteBishop, occupied, allWhite, moveSet);
+                generateQueenMoves(whiteQueen, occupied, allWhite, moveSet);
+                generateKnightMoves(whiteKnight, allWhite, moveSet);
+                generateKingMoves(whiteKing, allWhite, moveSet);
 
-                bishopAttackMask = generateBishopAttackMask(whiteBishop, occupied);
-                bishopAttackMask &= ~allWhite;
-
-                uint64_t queenAttackMask1 = generateRookAttackMask(whiteQueen, occupied);
-                uint64_t queenAttackMask2 = generateBishopAttackMask(whiteQueen, occupied);
-                queenAttackMask = (queenAttackMask1 | queenAttackMask2) & (~allWhite);
-
-                knightAttackMask = generateKnightAttackMask(whiteKnight);
-                knightAttackMask &= ~allWhite;
-
-                kingAttackMask = generateKingAttackMask(whiteKing);
-                kingAttackMask &= ~allWhite;
             }    
+            else{
+
+                generateRookMoves(blackRook, occupied, allBlack, moveSet);
+                generateBishopMoves(blackBishop, occupied, allBlack, moveSet);
+                generateQueenMoves(blackQueen, occupied, allBlack, moveSet);
+                generateKnightMoves(blackKnight, allBlack, moveSet);
+                generateKingMoves(blackKing, allBlack, moveSet);
+
+            }
 
         }
 
