@@ -44,42 +44,6 @@ class Board{
 
         }
 
-        void init(){
-            resetBoard();
-            calculateLeapers(); // Knight and King Movement mask calculation            
-        }
-
-        void calculateLeapers(){
-
-            const uint64_t notAFile = 0xFEFEFEFEFEFEFEFEULL;
-            const uint64_t notHFile = 0x7F7F7F7F7F7F7F7FULL;
-            const uint64_t notABFile = 0xFCFCFCFCFCFCFCFCULL;
-            const uint64_t notGHFile = 0x3F3F3F3F3F3F3F3FULL;
-
-            for(int square=0; square<64; square++){
-
-                uint64_t startingSquare = 1ULL << square;
-
-                // Calculating king moves
-
-                uint64_t kingMoves = 0;
-
-                kingMoves |= (startingSquare << 8) | (startingSquare >> 8); // N, S
-                kingMoves |= ((startingSquare & notHFile) << 1) | ((startingSquare & notAFile) >> 1); // E, W
-                kingMoves |= ((startingSquare & notHFile) << 9) | ((startingSquare & notAFile) << 7); // NE, NW
-                kingMoves |= ((startingSquare & notHFile) >> 7) | ((startingSquare & notAFile) >> 9); // SE, S
-                
-                kingMoveMask[square] = kingMoves;
-
-                uint64_t knightMoves = 0;
-
-                knightMoves |= ((startingSquare & notHFile) << 17) | ((startingSquare & notGHFile) << 10) | ((startingSquare & notGHFile) >> 6) | ((startingSquare & notHFile) >> 15);
-                knightMoves |= ((startingSquare & notAFile) << 15) | ((startingSquare & notABFile) << 6) | ((startingSquare & notABFile) >> 10) | ((startingSquare & notAFile) >> 17);
-
-                knightMoveMask[square] = knightMoves;
-            }
-        }
-
         uint16_t package_move(int from, int to){
 
             uint16_t moveRep = 0;
@@ -89,7 +53,7 @@ class Board{
 
         }
 
-        void generateRookAttackMask(uint64_t rookBoard, const uint64_t occupied, const uint64_t friendly, vector<uint16_t>& moveset){
+        void generateRookMoves(uint64_t rookBoard, const uint64_t occupied, const uint64_t friendly, vector<uint16_t>& moveset){
 
             uint64_t rank8 = 0xFF00000000000000ULL;
             uint64_t rank1 = 0x00000000000000FFULL;
@@ -99,101 +63,105 @@ class Board{
             while(rookBoard > 0){
                 int from = __builtin_ctzll(rookBoard);
                 int copy = from;
-                while(!(copy & rank8)){
+                while(!((1ULL << copy) & rank8)){
                     copy += 8;
-                    if(copy & friendly) break;
+                    if((1ULL << copy) & friendly) break;
                     uint64_t move = package_move(from, copy);
                     moveset.push_back(move);
-                    if(copy & occupied) break;
+                    if((1ULL << copy) & occupied) break;
                 }
                
                 copy = from;
-                while(!(copy & rank1)){
+                while(!((1ULL << copy) & rank1)){
                     copy -= 8;
-                    if(copy & friendly) break;
+                    if((1ULL << copy) & friendly) break;
                     uint64_t move = package_move(from, copy);
                     moveset.push_back(move);
-                    if(copy & occupied) break;
+                    if((1ULL << copy) & occupied) break;
                 }
 
                 copy = from;
-                while(!(copy & fileH)){
+                while(!((1ULL << copy) & fileH)){
                     copy += 1;
-                    if(copy & friendly) break;
+                    if((1ULL << copy) & friendly) break;
                     uint64_t move = package_move(from, copy);
                     moveset.push_back(move);
-                    if(copy & occupied) break;
+                    if((1ULL << copy) & occupied) break;
                 }
 
                 copy = from;
-                while(!(copy & fileA)){
+                while(!((1ULL << copy) & fileA)){
                     copy -= 1;
-                    if(copy & friendly) break;
+                    if((1ULL << copy) & friendly) break;
                     uint64_t move = package_move(from, copy);
                     moveset.push_back(move);
-                    if(copy & occupied) break;
+                    if((1ULL << copy) & occupied) break;
                 }
                 rookBoard &= (rookBoard - 1);
             }
             
         }
 
-        uint64_t generateBishopAttackMask(uint64_t bishopBoard, uint64_t occupied){
+        void generateBishopMoves(uint64_t bishopBoard, uint64_t occupied, uint64_t friendly, vector<uint16_t> &moveset){
 
             uint64_t rank8 = 0xFF00000000000000ULL;
             uint64_t rank1 = 0x00000000000000FFULL;
             uint64_t fileH = 0x8080808080808080ULL;
             uint64_t fileA = 0x0101010101010101ULL;
 
-            uint64_t bishopAttackMask = 0;
             while(bishopBoard > 0){
-                int index = __builtin_ctzll(bishopBoard);
-                uint64_t pos = (1ULL << index);
+                int from = __builtin_ctzll(bishopBoard);
+                int copy = from;
 
-                while(!(pos & rank8) && !(pos & fileH)){ // North-East
-                    pos <<= 9;
-                    bishopAttackMask |= pos;
-                    if(pos & occupied) break;
+                while(!((1ULL << copy) & rank8) && !((1ULL << copy) & fileH)){ // North-East
+                    copy += 9;
+                    if((1ULL << copy) & friendly) break;
+                    uint16_t move = package_move(from, copy);
+                    moveset.push_back(move);
+                    if((1ULL << copy) & occupied) break;
                 }
 
-                pos = (1ULL << index);
-                while(!(pos & fileA) && !(pos & rank8)){ // North-West
-                    pos <<= 7;
-                    bishopAttackMask |= pos;
-                    if(pos & occupied) break;
+                copy = from;
+                while(!((1ULL << copy) & fileA) && !((1ULL << copy) & rank8)){ // North-West
+                    copy += 7;
+                    if((1ULL << copy) & friendly) break;
+                    uint16_t move = package_move(from, copy);
+                    moveset.push_back(move);
+                    if((1ULL << copy) & occupied) break;
                 }
 
-                pos = (1ULL << index);
-                while(!(pos & fileH) && !(pos & rank1)){ // South-East
-                    pos >>= 7;
-                    bishopAttackMask |= pos;
-                    if(pos & occupied) break;
+                copy = from;
+                while(!((1ULL << copy) & fileH) && !((1ULL << copy) & rank1)){ // South-East
+                    copy -=7;
+                    if((1ULL << copy) & friendly) break;
+                    uint16_t move = package_move(from, copy);
+                    moveset.push_back(move);
+                    if((1ULL << copy) & occupied) break;
                 }   
 
-                 pos = (1ULL << index);
-                while(!(pos & fileA) && !(pos & rank1)){ // South-West
-                    pos >>= 9;
-                    bishopAttackMask |= pos;
-                    if(pos & occupied) break;
+                 copy = from;
+                while(!((1ULL << copy) & fileA) && !((1ULL << copy) & rank1)){ // South-West
+                    copy -= 9;
+                    if((1ULL << copy) & friendly) break;
+                    uint16_t move = package_move(from, copy);
+                    moveset.push_back(move);
+                    if((1ULL << copy) & occupied) break;
                 }  
 
                 bishopBoard &= (bishopBoard - 1);
             }
-            
-            return bishopAttackMask;
         }
 
-        uint64_t generateKnightAttackMask(uint64_t knightBoard){
+        void generateQueenMoves(uint64_t queenBoard, uint64_t occupied, uint64_t friendly, vector<uint16_t> &moveset){
 
-            uint64_t knightAttackMask = 0;
-            while(knightBoard > 0){
-                int index = __builtin_ctzll(knightBoard);
+            generateRookMoves(queenBoard, occupied, friendly, moveset);
+            generateBishopMoves(queenBoard, occupied, friendly, moveset);
+        }
 
-                knightAttackMask |= knightMoveMask[index];
-                knightBoard &= (knightBoard - 1);
-            }
+        void generateKnightAttackMask(uint64_t knightBoard, uint64_t friendly, vector<uint16_t> &moveset){
+
             
-            return knightAttackMask;
+
         }
 
         uint64_t generateKingAttackMask(uint64_t kingBoard){
