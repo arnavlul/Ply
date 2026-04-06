@@ -235,7 +235,59 @@ class Board{
 
         }
 
-        void generateMoves(bool side){ // 1 for white, 0 for black
+        void generateWhitePawnMoves(uint64_t whitePawns, uint64_t occupied, uint64_t friendly, vector<uint16_t> &moveSet){
+
+            uint64_t rank2 = 0x000000000000FF00ULL;
+            uint64_t fileH = 0x8080808080808080ULL;
+            uint64_t fileA = 0x0101010101010101ULL;
+            
+            while(whitePawns > 0){
+
+                int from = __builtin_ctzll(whitePawns);
+                int copy = from;
+                
+                // Single move forward
+                copy += 8;
+                if(!((1ULL << copy) & occupied)){
+                    uint16_t move = package_move(from, copy);
+                    moveSet.push_back(move);
+
+                    if((1ULL << from) & rank2){
+                        copy += 8;
+                        if(!(1ULL << copy & occupied)){
+                            uint16_t move = package_move(from, copy);
+                            moveSet.push_back(move);
+                        }
+                    }
+                }
+
+                copy = from;
+
+                if(!((1ULL << copy) & fileA)){ // Forward-left attack
+                    copy += 7;
+                    if(((1ULL << copy) & occupied) && !((1ULL << copy) & friendly)){
+                        uint16_t move = package_move(from, copy);
+                        moveSet.push_back(move);
+                    }
+                }
+                
+                copy = from;
+                if(!((1ULL << copy) & fileH)){ // Forward-right attack
+                    copy += 9;
+                    if(((1ULL << copy) & occupied) && !((1ULL << copy) & friendly)){
+                        uint16_t move = package_move(from, copy);
+                        moveSet.push_back(move);
+                    }
+                }
+
+                whitePawns &= (whitePawns - 1);
+
+            }
+        }
+
+        void generateBlackPawnMoves(uint64)
+
+        vector<uint16_t> generateMoves(bool side){ // 1 for white, 0 for black
 
             uint64_t allWhite = whitePawn | whiteKing | whiteQueen | whiteBishop | whiteKnight | whiteRook;
             uint64_t allBlack = blackPawn | blackKing | blackQueen | blackBishop | blackKnight | blackRook;
@@ -265,6 +317,7 @@ class Board{
 
             }
 
+            return moveSet;
         }
 
         void printBitBoard(uint64_t bitboard){
@@ -323,7 +376,7 @@ int main(){
     Board myBoard;
     // uciLoop(myBoard);
     myBoard.init();
-    myBoard.generateMoves();
+    vector<uint16_t> moves = myBoard.generateMoves(1);
 
     return 0;
 }
