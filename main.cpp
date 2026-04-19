@@ -4,8 +4,107 @@
 #include <bit>
 #include <vector>
 #include <sstream>
+#include <algorithm>
 
 using namespace std;
+
+namespace Evaluation {
+    const int PAWN_VAL = 100;
+    const int KNIGHT_VAL = 320;
+    const int BISHOP_VAL = 330;
+    const int ROOK_VAL = 500;
+    const int QUEEN_VAL = 900;
+    const int KING_VAL = 20000;
+
+    // PSTs are indexed from a1 (0) to h8 (63).
+    const int pawn_pst[64] = {
+         0,  0,  0,  0,  0,  0,  0,  0,
+         5, 10, 10,-20,-20, 10, 10,  5,
+         5, -5,-10,  0,  0,-10, -5,  5,
+         0,  0,  0, 20, 20,  0,  0,  0,
+         5,  5, 10, 25, 25, 10,  5,  5,
+        10, 10, 20, 30, 30, 20, 10, 10,
+        50, 50, 50, 50, 50, 50, 50, 50,
+         0,  0,  0,  0,  0,  0,  0,  0
+    };
+
+    const int knight_pst[64] = {
+        -50,-40,-30,-30,-30,-30,-40,-50,
+        -40,-20,  0,  5,  5,  0,-20,-40,
+        -30,  5, 10, 15, 15, 10,  5,-30,
+        -30,  0, 15, 20, 20, 15,  0,-30,
+        -30,  5, 15, 20, 20, 15,  5,-30,
+        -30,  0, 10, 15, 15, 10,  0,-30,
+        -40,-20,  0,  0,  0,  0,-20,-40,
+        -50,-40,-30,-30,-30,-30,-40,-50
+    };
+
+    const int bishop_pst[64] = {
+        -20,-10,-10,-10,-10,-10,-10,-20,
+        -10,  5,  0,  0,  0,  0,  5,-10,
+        -10, 10, 10, 10, 10, 10, 10,-10,
+        -10,  0, 10, 10, 10, 10,  0,-10,
+        -10,  5,  5, 10, 10,  5,  5,-10,
+        -10,  0,  5, 10, 10,  5,  0,-10,
+        -10,  0,  0,  0,  0,  0,  0,-10,
+        -20,-10,-10,-10,-10,-10,-10,-20
+    };
+
+    const int rook_pst[64] = {
+          0,  0,  0,  5,  5,  0,  0,  0,
+         -5,  0,  0,  0,  0,  0,  0, -5,
+         -5,  0,  0,  0,  0,  0,  0, -5,
+         -5,  0,  0,  0,  0,  0,  0, -5,
+         -5,  0,  0,  0,  0,  0,  0, -5,
+         -5,  0,  0,  0,  0,  0,  0, -5,
+          5, 10, 10, 10, 10, 10, 10,  5,
+          0,  0,  0,  0,  0,  0,  0,  0
+    };
+
+    const int queen_pst[64] = {
+        -20,-10,-10, -5, -5,-10,-10,-20,
+        -10,  0,  5,  0,  0,  0,  0,-10,
+        -10,  5,  5,  5,  5,  5,  0,-10,
+          0,  0,  5,  5,  5,  5,  0, -5,
+         -5,  0,  5,  5,  5,  5,  0, -5,
+        -10,  0,  5,  5,  5,  5,  0,-10,
+        -10,  0,  0,  0,  0,  0,  0,-10,
+        -20,-10,-10, -5, -5,-10,-10,-20
+    };
+
+    const int king_pst[64] = {
+         20, 30, 10,  0,  0, 10, 30, 20,
+         20, 20,  0,  0,  0,  0, 20, 20,
+        -10,-20,-20,-20,-20,-20,-20,-10,
+        -20,-30,-30,-40,-40,-30,-30,-20,
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -30,-40,-40,-50,-50,-40,-40,-30
+    };
+
+    uint64_t pieceKeys[12][64];
+    uint64_t castleKeys[16];
+    uint64_t enPassantKeys[8];
+    uint64_t sideKey;
+
+    uint64_t random64() {
+        static uint64_t seed = 1070372ULL;
+        seed ^= seed >> 12;
+        seed ^= seed << 25;
+        seed ^= seed >> 27;
+        return seed * 0x2545F4914F6CDD1DULL;
+    }
+
+    void initZobrist() {
+        for (int i = 0; i < 12; i++)
+            for (int j = 0; j < 64; j++)
+                pieceKeys[i][j] = random64();
+        for (int i = 0; i < 16; i++) castleKeys[i] = random64();
+        for (int i = 0; i < 8; i++) enPassantKeys[i] = random64();
+        sideKey = random64();
+    }
+}
 
 class Board {
 private:
@@ -33,9 +132,110 @@ private:
     bool sideToMove;
     int halfmoveClock;
     int fullmoveNumber;
+    uint64_t hashKey;
+
+    int evaluatePiece(uint64_t bb, int val, const int pst[64], bool white) const {
+        int s = 0;
+        while (bb) {
+            int sq = __builtin_ctzll(bb);
+            s += val + pst[white ? sq : (sq ^ 56)];
+            bb &= (bb - 1);
+        }
+        return s;
+    }
 
 public:
     enum PieceType { NONE, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING };
+
+    enum HashFlag { HASH_EXACT, HASH_ALPHA, HASH_BETA };
+    struct TTEntry {
+        uint64_t key;
+        int score;
+        int depth;
+        int flag;
+        uint16_t bestMove;
+    };
+    vector<TTEntry> tt;
+    const int TT_SIZE = 1000000;
+
+    void clearTT() {
+        for (int i = 0; i < TT_SIZE; i++) tt[i].key = 0;
+    }
+
+    int scoreToTT(int score, int ply) {
+        if (score > 49000) return score + ply;
+        if (score < -49000) return score - ply;
+        return score;
+    }
+
+    int scoreFromTT(int score, int ply) {
+        if (score > 49000) return score - ply;
+        if (score < -49000) return score + ply;
+        return score;
+    }
+
+    int probeTT(uint64_t key, int depth, int alpha, int beta, int ply, uint16_t& bestMove) {
+        TTEntry& entry = tt[key % TT_SIZE];
+        if (entry.key == key) {
+            bestMove = entry.bestMove;
+            if (entry.depth >= depth) {
+                int score = scoreFromTT(entry.score, ply);
+                if (entry.flag == HASH_EXACT) return score;
+                if (entry.flag == HASH_ALPHA && score <= alpha) return alpha;
+                if (entry.flag == HASH_BETA && score >= beta) return beta;
+            }
+        }
+        return -1000001;
+    }
+
+    void storeTT(uint64_t key, int depth, int score, int flag, uint16_t bestMove, int ply) {
+        TTEntry& entry = tt[key % TT_SIZE];
+        entry.key = key;
+        entry.score = scoreToTT(score, ply);
+        entry.depth = depth;
+        entry.flag = flag;
+        entry.bestMove = bestMove;
+    }
+
+    uint64_t generateHashKey() {
+        uint64_t h = 0;
+        uint64_t occupancy = (whitePawn | whiteKing | whiteQueen | whiteBishop | whiteKnight | whiteRook) |
+                             (blackPawn | blackKing | blackQueen | blackBishop | blackKnight | blackRook);
+        uint64_t temp = occupancy;
+        while (temp) {
+            int sq = __builtin_ctzll(temp);
+            int pt = getPieceAt(sq, true);
+            if (pt != NONE) h ^= Evaluation::pieceKeys[pt - 1][sq];
+            else {
+                pt = getPieceAt(sq, false);
+                if (pt != NONE) h ^= Evaluation::pieceKeys[pt + 5][sq];
+            }
+            temp &= (temp - 1);
+        }
+        if (!sideToMove) h ^= Evaluation::sideKey;
+        h ^= Evaluation::castleKeys[castlingRights];
+        if (enPassantSquare != -1) h ^= Evaluation::enPassantKeys[enPassantSquare % 8];
+        return h;
+    }
+
+    int evaluate() const {
+        int score = 0;
+        score += evaluatePiece(whitePawn, Evaluation::PAWN_VAL, Evaluation::pawn_pst, true);
+        score += evaluatePiece(whiteKnight, Evaluation::KNIGHT_VAL, Evaluation::knight_pst, true);
+        score += evaluatePiece(whiteBishop, Evaluation::BISHOP_VAL, Evaluation::bishop_pst, true);
+        score += evaluatePiece(whiteRook, Evaluation::ROOK_VAL, Evaluation::rook_pst, true);
+        score += evaluatePiece(whiteQueen, Evaluation::QUEEN_VAL, Evaluation::queen_pst, true);
+        score += evaluatePiece(whiteKing, Evaluation::KING_VAL, Evaluation::king_pst, true);
+
+        score -= evaluatePiece(blackPawn, Evaluation::PAWN_VAL, Evaluation::pawn_pst, false);
+        score -= evaluatePiece(blackKnight, Evaluation::KNIGHT_VAL, Evaluation::knight_pst, false);
+        score -= evaluatePiece(blackBishop, Evaluation::BISHOP_VAL, Evaluation::bishop_pst, false);
+        score -= evaluatePiece(blackRook, Evaluation::ROOK_VAL, Evaluation::rook_pst, false);
+        score -= evaluatePiece(blackQueen, Evaluation::QUEEN_VAL, Evaluation::queen_pst, false);
+        score -= evaluatePiece(blackKing, Evaluation::KING_VAL, Evaluation::king_pst, false);
+
+        return sideToMove ? score : -score;
+    }
 
     struct UndoInfo {
         uint8_t castlingRights;
@@ -43,6 +243,7 @@ public:
         int halfmoveClock;
         int capturedPieceType;
         uint16_t move;
+        uint64_t hashKey;
     };
 
     enum MoveFlags {
@@ -68,7 +269,7 @@ public:
 
     bool getSideToMove() const { return sideToMove; }
 
-    int getPieceAt(int square, bool side) {
+    int getPieceAt(int square, bool side) const {
         uint64_t bit = (1ULL << square);
         if (side) { // White
             if (whitePawn & bit) return PAWN;
@@ -88,9 +289,129 @@ public:
         return NONE;
     }
 
+    bool inCheck(bool side) const {
+        uint64_t kingBB = side ? whiteKing : blackKing;
+        return (attackedSquares(!side) & kingBB) != 0;
+    }
+
+    int getMoveScore(uint16_t move, uint16_t hashMove) const {
+        if (move == hashMove) return 2000000;
+        int flags = getFlags(move);
+        if (flags & CAPTURE) {
+            int attacker = getPieceAt(getFrom(move), sideToMove);
+            int victim = getPieceAt(getTo(move), !sideToMove);
+            if (flags == EP_CAPTURE) victim = PAWN;
+            
+            auto getVal = [](int t) {
+                switch(t) {
+                    case PAWN: return 1;
+                    case KNIGHT: return 2;
+                    case BISHOP: return 3;
+                    case ROOK: return 4;
+                    case QUEEN: return 5;
+                    case KING: return 6;
+                    default: return 0;
+                }
+            };
+            return 1000 + (getVal(victim) * 10) - getVal(attacker);
+        }
+        return 0;
+    }
+
+    int quiescence(int alpha, int beta) {
+        int standPat = evaluate();
+        if (standPat >= beta) return beta;
+        if (alpha < standPat) alpha = standPat;
+
+        vector<uint16_t> moves = generateMoves(sideToMove);
+        struct ScoredMove { uint16_t move; int score; };
+        vector<ScoredMove> scoredMoves;
+        for (uint16_t m : moves) {
+            if (getFlags(m) & CAPTURE) scoredMoves.push_back({m, getMoveScore(m, 0)});
+        }
+        sort(scoredMoves.begin(), scoredMoves.end(), [](const ScoredMove& a, const ScoredMove& b) {
+            return a.score > b.score;
+        });
+
+        for (auto& sm : scoredMoves) {
+            UndoInfo undo;
+            if (makeMove(sm.move, undo)) {
+                int score = -quiescence(-beta, -alpha);
+                unmakeMove(sm.move, undo);
+                if (score >= beta) return beta;
+                if (score > alpha) alpha = score;
+            }
+        }
+        return alpha;
+    }
+
+    int negamax(int depth, int alpha, int beta, int ply, uint16_t& bestMoveOut, uint16_t pvMove) {
+        int oldAlpha = alpha;
+        uint16_t ttMove = 0;
+        int ttScore = probeTT(hashKey, depth, alpha, beta, ply, ttMove);
+        if (ttScore != -1000001) return ttScore;
+
+        if (depth <= 0) return quiescence(alpha, beta);
+
+        vector<uint16_t> moves = generateMoves(sideToMove);
+        struct ScoredMove { uint16_t move; int score; };
+        vector<ScoredMove> scoredMoves;
+        uint16_t bestMoveThisNode = ttMove ? ttMove : pvMove;
+        for (uint16_t m : moves) scoredMoves.push_back({m, getMoveScore(m, bestMoveThisNode)});
+        
+        sort(scoredMoves.begin(), scoredMoves.end(), [](const ScoredMove& a, const ScoredMove& b) {
+            return a.score > b.score;
+        });
+
+        int legalMoves = 0;
+        int bestScore = -1000000;
+        uint16_t localBestMove = 0;
+
+        for (auto& sm : scoredMoves) {
+            UndoInfo undo;
+            if (makeMove(sm.move, undo)) {
+                legalMoves++;
+                uint16_t dummy;
+                int score = -negamax(depth - 1, -beta, -alpha, ply + 1, dummy, 0);
+                unmakeMove(sm.move, undo);
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    localBestMove = sm.move;
+                }
+                if (score > alpha) {
+                    alpha = score;
+                }
+                if (alpha >= beta) break;
+            }
+        }
+
+        if (legalMoves == 0) {
+            if (inCheck(sideToMove)) return -50000 + ply;
+            return 0;
+        }
+
+        int flag = HASH_EXACT;
+        if (bestScore <= oldAlpha) flag = HASH_ALPHA;
+        else if (bestScore >= beta) flag = HASH_BETA;
+        storeTT(hashKey, depth, bestScore, flag, localBestMove, ply);
+
+        if (ply == 0) bestMoveOut = localBestMove;
+        return bestScore;
+    }
+
+    uint16_t search(int maxDepth) {
+        uint16_t bestMove = 0;
+        for (int d = 1; d <= maxDepth; d++) {
+            negamax(d, -1000000, 1000000, 0, bestMove, bestMove);
+        }
+        return bestMove;
+    }
+
     void togglePiece(int pieceType, int square, bool side) {
         uint64_t bit = (1ULL << square);
         if (side) {
+            hashKey ^= Evaluation::pieceKeys[pieceType - 1][square];
             switch (pieceType) {
                 case PAWN: whitePawn ^= bit; break;
                 case KNIGHT: whiteKnight ^= bit; break;
@@ -100,6 +421,7 @@ public:
                 case KING: whiteKing ^= bit; break;
             }
         } else {
+            hashKey ^= Evaluation::pieceKeys[pieceType + 5][square];
             switch (pieceType) {
                 case PAWN: blackPawn ^= bit; break;
                 case KNIGHT: blackKnight ^= bit; break;
@@ -122,8 +444,13 @@ public:
         undo.halfmoveClock = halfmoveClock;
         undo.capturedPieceType = NONE;
         undo.move = move;
+        undo.hashKey = hashKey;
 
         int piece = getPieceAt(from, side);
+
+        // XOR out old rights and EP
+        hashKey ^= Evaluation::castleKeys[castlingRights];
+        if (enPassantSquare != -1) hashKey ^= Evaluation::enPassantKeys[enPassantSquare % 8];
 
         // Execute Move: Toggle from square
         togglePiece(piece, from, side);
@@ -167,12 +494,17 @@ public:
         castlingRights &= (castlingMask[from] & castlingMask[to]);
         enPassantSquare = (flags == DOUBLE_PUSH) ? (side ? from + 8 : from - 8) : -1;
 
+        // XOR in new rights and EP
+        hashKey ^= Evaluation::castleKeys[castlingRights];
+        if (enPassantSquare != -1) hashKey ^= Evaluation::enPassantKeys[enPassantSquare % 8];
+
         // Update clocks
         halfmoveClock++;
         if (piece == PAWN || (flags & CAPTURE)) halfmoveClock = 0;
         if (!side) fullmoveNumber++;
 
         sideToMove = !sideToMove;
+        hashKey ^= Evaluation::sideKey;
 
         // Legality Check: Was the king left in check?
         uint64_t kingBB = side ? whiteKing : blackKing;
@@ -227,6 +559,7 @@ public:
         enPassantSquare = undo.enPassantSquare;
         halfmoveClock = undo.halfmoveClock;
         if (!side) fullmoveNumber--;
+        hashKey = undo.hashKey;
     }
 
     uint16_t package_move(int from, int to, int flags = 0) {
@@ -253,6 +586,7 @@ public:
         sideToMove = 1;
         halfmoveClock = 0;
         fullmoveNumber = 1;
+        hashKey = generateHashKey();
     }
 
     void parseFEN(const string& fen) {
@@ -312,6 +646,7 @@ public:
             halfmoveClock = stoi(halfmove);
             fullmoveNumber = stoi(fullmove);
         } catch (...) {}
+        hashKey = generateHashKey();
     }
 
     uint16_t parseMove(string moveStr) {
@@ -337,6 +672,8 @@ public:
         castlingMask[63] = 11; // H8
         castlingMask[60] = 3;  // E8
 
+        tt.resize(TT_SIZE);
+        clearTT();
         resetBoard();
         calculateLeapers();
     }
@@ -633,10 +970,13 @@ void uciLoop(Board& myBoard) {
             }
         } else if (token == "perft") {
             int depth; if (ss >> depth) myBoard.perftDivide(depth);
+        } else if (token == "eval") {
+            cout << "Evaluation: " << myBoard.evaluate() << " centipawns" << endl;
         } else if (token == "go") {
-            vector<uint16_t> moves = myBoard.generateMoves(myBoard.getSideToMove());
-            uint16_t bestMove = 0;
-            for (uint16_t m : moves) { Board::UndoInfo undo; if (myBoard.makeMove(m, undo)) { bestMove = m; myBoard.unmakeMove(m, undo); break; } }
+            int depth = 6;
+            string sub;
+            if (ss >> sub && sub == "depth") ss >> depth;
+            uint16_t bestMove = myBoard.search(depth);
             if (bestMove) cout << "bestmove " << myBoard.moveToString(bestMove) << endl;
             else cout << "bestmove 0000" << endl;
         } else if (token == "quit") {
@@ -646,6 +986,7 @@ void uciLoop(Board& myBoard) {
 }
 
 int main() {
+    Evaluation::initZobrist();
     Board myBoard;
     myBoard.init();
     uciLoop(myBoard);
