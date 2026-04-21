@@ -5,6 +5,9 @@
 #include <vector>
 #include <sstream>
 #include <algorithm>
+#include <chrono>
+#include <thread>
+#include <atomic>
 
 using namespace std;
 
@@ -16,7 +19,6 @@ namespace Evaluation {
     const int QUEEN_VAL = 900;
     const int KING_VAL = 20000;
 
-    // PSTs are indexed from a1 (0) to h8 (63).
     const int pawn_pst[64] = {
          0,  0,  0,  0,  0,  0,  0,  0,
          5, 10, 10,-20,-20, 10, 10,  5,
@@ -146,6 +148,27 @@ private:
 
 public:
     enum PieceType { NONE, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING };
+
+    struct SearchLimits {
+        int wtime = -1, btime = -1, winc = 0, binc = 0, movestogo = 30;
+        int depth = 100, movetime = -1;
+        bool infinite = false;
+    };
+
+    std::atomic<bool> stopSearch{false};
+    chrono::time_point<chrono::steady_clock> startTime;
+    long long timeLimit = 0;
+    uint64_t nodes = 0;
+
+    void checkTime() {
+        if (timeLimit != -1) {
+            auto now = chrono::steady_clock::now();
+            auto elapsed = chrono::duration_cast<chrono::milliseconds>(now - startTime).count();
+            if (elapsed >= timeLimit) stopSearch = true;
+        }
+    }
+
+
 
     enum HashFlag { HASH_EXACT, HASH_ALPHA, HASH_BETA };
     struct TTEntry {
@@ -319,6 +342,10 @@ public:
     }
 
     int quiescence(int alpha, int beta) {
+        nodes++;
+        if (nodes % 2048 == 0) checkTime();
+        if (stopSearch) return 0;
+
         int standPat = evaluate();
         if (standPat >= beta) return beta;
         if (alpha < standPat) alpha = standPat;
@@ -338,6 +365,7 @@ public:
             if (makeMove(sm.move, undo)) {
                 int score = -quiescence(-beta, -alpha);
                 unmakeMove(sm.move, undo);
+                if (stopSearch) return 0;
                 if (score >= beta) return beta;
                 if (score > alpha) alpha = score;
             }
@@ -346,6 +374,10 @@ public:
     }
 
     int negamax(int depth, int alpha, int beta, int ply, uint16_t& bestMoveOut, uint16_t pvMove) {
+        nodes++;
+        if (nodes % 2048 == 0) checkTime();
+        if (stopSearch) return 0;
+
         int oldAlpha = alpha;
         uint16_t ttMove = 0;
         int ttScore = probeTT(hashKey, depth, alpha, beta, ply, ttMove);
@@ -375,6 +407,8 @@ public:
                 int score = -negamax(depth - 1, -beta, -alpha, ply + 1, dummy, 0);
                 unmakeMove(sm.move, undo);
 
+                if (stopSearch) return 0;
+
                 if (score > bestScore) {
                     bestScore = score;
                     localBestMove = sm.move;
@@ -400,10 +434,52 @@ public:
         return bestScore;
     }
 
-    uint16_t search(int maxDepth) {
+    uint16_t search(const SearchLimits& limits) {
+        stopSearch = false;
+        nodes = 0;
+        startTime = chrono::steady_clock::now();
+        
+        if (limits.movetime != -1) {
+            timeLimit = limits.movetime - 50;
+        } else if (sideToMove ? (limits.wtime != -1) : (limits.btime != -1)) {
+            int time = sideToMove ? limits.wtime : limits.btime;
+            int inc = sideToMove ? limits.winc : limits.binc;
+            int mtg = (limits.movestogo > 0) ? limits.movestogo : 30;
+            timeLimit = time / mtg + inc - 50;
+        } else {
+            timeLimit = -1;
+        }
+        if (timeLimit < 20 && timeLimit != -1) timeLimit = 20;
+
         uint16_t bestMove = 0;
-        for (int d = 1; d <= maxDepth; d++) {
-            negamax(d, -1000000, 1000000, 0, bestMove, bestMove);
+        // Fallback: get the first legal move
+        vector<uint16_t> allMoves = generateMoves(sideToMove);
+        for (uint16_t m : allMoves) {
+            UndoInfo undo;
+            if (makeMove(m, undo)) {
+                unmakeMove(m, undo);
+                bestMove = m;
+                break;
+            }
+        }
+
+        for (int d = 1; d <= limits.depth; d++) {
+            uint16_t currentBest = 0;
+            int score = negamax(d, -1000000, 1000000, 0, currentBest, bestMove);
+            
+            if (stopSearch) {
+                if (currentBest != 0) bestMove = currentBest;
+                break;
+            }
+            
+            bestMove = currentBest;
+            
+            auto now = chrono::steady_clock::now();
+            auto elapsed = chrono::duration_cast<chrono::milliseconds>(now - startTime).count();
+            if (elapsed == 0) elapsed = 1;
+            cout << "info depth " << d << " score cp " << score << " nodes " << nodes << " time " << elapsed << " nps " << (nodes * 1000 / elapsed) << " pv " << moveToString(bestMove) << endl;
+            
+            if (limits.infinite == false && timeLimit != -1 && elapsed > timeLimit / 2) break; 
         }
         return bestMove;
     }
@@ -447,15 +523,11 @@ public:
         undo.hashKey = hashKey;
 
         int piece = getPieceAt(from, side);
-
-        // XOR out old rights and EP
         hashKey ^= Evaluation::castleKeys[castlingRights];
         if (enPassantSquare != -1) hashKey ^= Evaluation::enPassantKeys[enPassantSquare % 8];
 
-        // Execute Move: Toggle from square
         togglePiece(piece, from, side);
 
-        // Handle Captures
         if (flags & CAPTURE) {
             if (flags == EP_CAPTURE) {
                 int epSq = side ? to - 8 : to + 8;
@@ -469,7 +541,6 @@ public:
             }
         }
 
-        // Handle Special Moves
         if (flags == K_CASTLE) {
             if (side) { togglePiece(ROOK, 7, 1); togglePiece(ROOK, 5, 1); }
             else { togglePiece(ROOK, 63, 0); togglePiece(ROOK, 61, 0); }
@@ -478,7 +549,6 @@ public:
             else { togglePiece(ROOK, 56, 0); togglePiece(ROOK, 58, 0); }
         }
 
-        // Promotion or Regular Move to destination
         if (flags >= PROMO_KNIGHT) {
             int promoPiece = KNIGHT;
             int promoType = flags & 3;
@@ -490,15 +560,12 @@ public:
             togglePiece(piece, to, side);
         }
 
-        // Update Rights and EP
         castlingRights &= (castlingMask[from] & castlingMask[to]);
         enPassantSquare = (flags == DOUBLE_PUSH) ? (side ? from + 8 : from - 8) : -1;
 
-        // XOR in new rights and EP
         hashKey ^= Evaluation::castleKeys[castlingRights];
         if (enPassantSquare != -1) hashKey ^= Evaluation::enPassantKeys[enPassantSquare % 8];
 
-        // Update clocks
         halfmoveClock++;
         if (piece == PAWN || (flags & CAPTURE)) halfmoveClock = 0;
         if (!side) fullmoveNumber++;
@@ -506,13 +573,11 @@ public:
         sideToMove = !sideToMove;
         hashKey ^= Evaluation::sideKey;
 
-        // Legality Check: Was the king left in check?
         uint64_t kingBB = side ? whiteKing : blackKing;
         if (attackedSquares(!side) & kingBB) {
             unmakeMove(move, undo);
             return false;
         }
-
         return true;
     }
 
@@ -525,18 +590,15 @@ public:
 
         int piece = getPieceAt(to, side);
 
-        // Promotion Undo
         if (flags >= PROMO_KNIGHT) {
-            togglePiece(piece, to, side); // Remove promoted piece
-            togglePiece(PAWN, to, side);  // Add pawn back at 'to'
+            togglePiece(piece, to, side);
+            togglePiece(PAWN, to, side);
             piece = PAWN;
         }
 
-        // Move piece back from 'to' to 'from'
         togglePiece(piece, to, side);
         togglePiece(piece, from, side);
 
-        // Restore Captured Piece
         if (flags & CAPTURE) {
             if (flags == EP_CAPTURE) {
                 int epSq = side ? to - 8 : to + 8;
@@ -546,7 +608,6 @@ public:
             }
         }
 
-        // Reverse Castling Rook
         if (flags == K_CASTLE) {
             if (side) { togglePiece(ROOK, 7, 1); togglePiece(ROOK, 5, 1); }
             else { togglePiece(ROOK, 63, 0); togglePiece(ROOK, 61, 0); }
@@ -628,20 +689,16 @@ public:
                 file++;
             }
         }
-
         sideToMove = (side == "w");
-
         for (char c : castling) {
             if (c == 'K') castlingRights |= WK;
             else if (c == 'Q') castlingRights |= WQ;
             else if (c == 'k') castlingRights |= BK;
             else if (c == 'q') castlingRights |= BQ;
         }
-
         if (ep != "-" && ep.length() >= 2) {
             enPassantSquare = (ep[1] - '1') * 8 + (ep[0] - 'a');
         }
-
         try {
             halfmoveClock = stoi(halfmove);
             fullmoveNumber = stoi(fullmove);
@@ -665,13 +722,8 @@ public:
 
     void init() {
         for (int i = 0; i < 64; i++) castlingMask[i] = 15;
-        castlingMask[0] = 13; // A1
-        castlingMask[7] = 14; // H1
-        castlingMask[4] = 12; // E1
-        castlingMask[56] = 7; // A8
-        castlingMask[63] = 11; // H8
-        castlingMask[60] = 3;  // E8
-
+        castlingMask[0] = 13; castlingMask[7] = 14; castlingMask[4] = 12;
+        castlingMask[56] = 7; castlingMask[63] = 11; castlingMask[60] = 3;
         tt.resize(TT_SIZE);
         clearTT();
         resetBoard();
@@ -683,17 +735,14 @@ public:
         const uint64_t notHFile = 0x7F7F7F7F7F7F7F7FULL;
         const uint64_t notABFile = 0xFCFCFCFCFCFCFCFCULL;
         const uint64_t notGHFile = 0x3F3F3F3F3F3F3F3FULL;
-
         for (int square = 0; square < 64; square++) {
             uint64_t startingSquare = 1ULL << square;
-
             uint64_t kingMoves = 0;
             kingMoves |= (startingSquare << 8) | (startingSquare >> 8);
             kingMoves |= ((startingSquare & notHFile) << 1) | ((startingSquare & notAFile) >> 1);
             kingMoves |= ((startingSquare & notHFile) << 9) | ((startingSquare & notAFile) << 7);
             kingMoves |= ((startingSquare & notHFile) >> 7) | ((startingSquare & notAFile) >> 9);
             kingMoveMask[square] = kingMoves;
-
             uint64_t knightMoves = 0;
             knightMoves |= ((startingSquare & notHFile) << 17) | ((startingSquare & notGHFile) << 10) | ((startingSquare & notGHFile) >> 6) | ((startingSquare & notHFile) >> 15);
             knightMoves |= ((startingSquare & notAFile) << 15) | ((startingSquare & notABFile) << 6) | ((startingSquare & notABFile) >> 10) | ((startingSquare & notAFile) >> 17);
@@ -705,7 +754,6 @@ public:
         uint64_t attacks = 0;
         uint64_t fileA = 0x0101010101010101ULL, fileH = 0x8080808080808080ULL;
         uint64_t rank1 = 0x00000000000000FFULL, rank8 = 0xFF00000000000000ULL;
-
         int copy = square;
         while (!((1ULL << copy) & rank8)) { copy += 8; attacks |= (1ULL << copy); if ((1ULL << copy) & occupancy) break; }
         copy = square;
@@ -721,7 +769,6 @@ public:
         uint64_t attacks = 0;
         uint64_t fileA = 0x0101010101010101ULL, fileH = 0x8080808080808080ULL;
         uint64_t rank1 = 0x00000000000000FFULL, rank8 = 0xFF00000000000000ULL;
-
         int copy = square;
         while (!((1ULL << copy) & rank8) && !((1ULL << copy) & fileH)) { copy += 9; attacks |= (1ULL << copy); if ((1ULL << copy) & occupancy) break; }
         copy = square;
@@ -738,7 +785,6 @@ public:
         uint64_t occupancy = (whitePawn | whiteKing | whiteQueen | whiteBishop | whiteKnight | whiteRook) |
                              (blackPawn | blackKing | blackQueen | blackBishop | blackKnight | blackRook);
         const uint64_t notAFile = 0xFEFEFEFEFEFEFEFEULL, notHFile = 0x7F7F7F7F7F7F7F7FULL;
-
         if (side) {
             attacks |= (whitePawn << 7) & notHFile;
             attacks |= (whitePawn << 9) & notAFile;
@@ -766,7 +812,6 @@ public:
     void generateRookMoves(uint64_t rookBoard, uint64_t occupied, uint64_t friendly, vector<uint16_t>& moveset) {
         uint64_t rank8 = 0xFF00000000000000ULL, rank1 = 0x00000000000000FFULL;
         uint64_t fileH = 0x8080808080808080ULL, fileA = 0x0101010101010101ULL;
-
         while (rookBoard > 0) {
             int from = __builtin_ctzll(rookBoard);
             int copy = from;
@@ -784,7 +829,6 @@ public:
     void generateBishopMoves(uint64_t bishopBoard, uint64_t occupied, uint64_t friendly, vector<uint16_t>& moveset) {
         uint64_t rank8 = 0xFF00000000000000ULL, rank1 = 0x00000000000000FFULL;
         uint64_t fileH = 0x8080808080808080ULL, fileA = 0x0101010101010101ULL;
-
         while (bishopBoard > 0) {
             int from = __builtin_ctzll(bishopBoard);
             int copy = from;
@@ -938,19 +982,29 @@ public:
 
 void uciLoop(Board& myBoard) {
     string command;
+    thread searchThread;
+    auto stopSearching = [&]() {
+        myBoard.stopSearch = true;
+        if (searchThread.joinable()) searchThread.join();
+    };
+
     while (getline(cin, command)) {
         istringstream ss(command);
         string token;
         ss >> token;
         if (token == "uci") {
+            stopSearching();
             cout << "id name GrandmasterZero" << endl;
             cout << "id author Arnav" << endl;
             cout << "uciok" << endl;
         } else if (token == "isready") {
             cout << "readyok" << endl;
         } else if (token == "ucinewgame") {
+            stopSearching();
+            myBoard.clearTT();
             myBoard.parseFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
         } else if (token == "position") {
+            stopSearching();
             string sub;
             ss >> sub;
             if (sub == "startpos") {
@@ -969,20 +1023,37 @@ void uciLoop(Board& myBoard) {
                 }
             }
         } else if (token == "perft") {
+            stopSearching();
             int depth; if (ss >> depth) myBoard.perftDivide(depth);
         } else if (token == "eval") {
             cout << "Evaluation: " << myBoard.evaluate() << " centipawns" << endl;
         } else if (token == "go") {
-            int depth = 6;
+            stopSearching();
+            Board::SearchLimits limits;
             string sub;
-            if (ss >> sub && sub == "depth") ss >> depth;
-            uint16_t bestMove = myBoard.search(depth);
-            if (bestMove) cout << "bestmove " << myBoard.moveToString(bestMove) << endl;
-            else cout << "bestmove 0000" << endl;
+            while (ss >> sub) {
+                if (sub == "wtime") ss >> limits.wtime;
+                else if (sub == "btime") ss >> limits.btime;
+                else if (sub == "winc") ss >> limits.winc;
+                else if (sub == "binc") ss >> limits.binc;
+                else if (sub == "movestogo") ss >> limits.movestogo;
+                else if (sub == "depth") ss >> limits.depth;
+                else if (sub == "movetime") ss >> limits.movetime;
+                else if (sub == "infinite") limits.infinite = true;
+            }
+            myBoard.stopSearch = false;
+            searchThread = thread([&myBoard, limits]() {
+                uint16_t bestMove = myBoard.search(limits);
+                cout << "bestmove " << myBoard.moveToString(bestMove) << endl;
+            });
+        } else if (token == "stop") {
+            stopSearching();
         } else if (token == "quit") {
+            stopSearching();
             break;
         }
     }
+    stopSearching();
 }
 
 int main() {
