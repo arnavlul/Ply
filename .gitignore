@@ -8,4 +8,7 @@ needs.txt
 arena_3.5.1/
 image.png
 GrandmasterZero.exe
-fasttest/
+stockfish/
+Openings-EPD/
+config.json
+fastchess/

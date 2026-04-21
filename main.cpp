@@ -381,7 +381,10 @@ public:
         int oldAlpha = alpha;
         uint16_t ttMove = 0;
         int ttScore = probeTT(hashKey, depth, alpha, beta, ply, ttMove);
-        if (ttScore != -1000001) return ttScore;
+        if (ttScore != -1000001) {
+            if (ply == 0) bestMoveOut = ttMove;
+            return ttScore;
+        }
 
         if (depth <= 0) return quiescence(alpha, beta);
 
@@ -403,6 +406,11 @@ public:
             UndoInfo undo;
             if (makeMove(sm.move, undo)) {
                 legalMoves++;
+                
+                if (ply == 0 && moveToString(sm.move) == "d4c2") {
+                    // cout << "info string Found d4c2 legal at ply 0. Score will be calculated." << endl;
+                }
+
                 uint16_t dummy;
                 int score = -negamax(depth - 1, -beta, -alpha, ply + 1, dummy, 0);
                 unmakeMove(sm.move, undo);
@@ -472,7 +480,7 @@ public:
                 break;
             }
             
-            bestMove = currentBest;
+            if (currentBest != 0) bestMove = currentBest;
             
             auto now = chrono::steady_clock::now();
             auto elapsed = chrono::duration_cast<chrono::milliseconds>(now - startTime).count();
@@ -546,7 +554,7 @@ public:
             else { togglePiece(ROOK, 63, 0); togglePiece(ROOK, 61, 0); }
         } else if (flags == Q_CASTLE) {
             if (side) { togglePiece(ROOK, 0, 1); togglePiece(ROOK, 3, 1); }
-            else { togglePiece(ROOK, 56, 0); togglePiece(ROOK, 58, 0); }
+            else { togglePiece(ROOK, 56, 0); togglePiece(ROOK, 59, 0); }
         }
 
         if (flags >= PROMO_KNIGHT) {
@@ -574,7 +582,8 @@ public:
         hashKey ^= Evaluation::sideKey;
 
         uint64_t kingBB = side ? whiteKing : blackKing;
-        if (attackedSquares(!side) & kingBB) {
+        uint64_t attacks = attackedSquares(!side);
+        if (attacks & kingBB) {
             unmakeMove(move, undo);
             return false;
         }
@@ -613,7 +622,7 @@ public:
             else { togglePiece(ROOK, 63, 0); togglePiece(ROOK, 61, 0); }
         } else if (flags == Q_CASTLE) {
             if (side) { togglePiece(ROOK, 0, 1); togglePiece(ROOK, 3, 1); }
-            else { togglePiece(ROOK, 56, 0); togglePiece(ROOK, 58, 0); }
+            else { togglePiece(ROOK, 56, 0); togglePiece(ROOK, 59, 0); }
         }
 
         castlingRights = undo.castlingRights;
@@ -747,8 +756,9 @@ public:
             knightMoves |= ((startingSquare & notHFile) << 17) | ((startingSquare & notGHFile) << 10) | ((startingSquare & notGHFile) >> 6) | ((startingSquare & notHFile) >> 15);
             knightMoves |= ((startingSquare & notAFile) << 15) | ((startingSquare & notABFile) << 6) | ((startingSquare & notABFile) >> 10) | ((startingSquare & notAFile) >> 17);
             knightMoveMask[square] = knightMoves;
-        }
-    }
+            }
+            }
+
 
     uint64_t getRookMoves(int square, uint64_t occupancy) const {
         uint64_t attacks = 0;
@@ -1019,7 +1029,12 @@ void uciLoop(Board& myBoard) {
                 string moveStr;
                 while (ss >> moveStr) {
                     uint16_t move = myBoard.parseMove(moveStr);
-                    if (move) { Board::UndoInfo undo; myBoard.makeMove(move, undo); }
+                    if (move) { 
+                        Board::UndoInfo undo; 
+                        myBoard.makeMove(move, undo); 
+                    } else {
+                        break;
+                    }
                 }
             }
         } else if (token == "perft") {
@@ -1056,6 +1071,7 @@ void uciLoop(Board& myBoard) {
     stopSearching();
 }
 
+#ifndef UNIT_TEST
 int main() {
     Evaluation::initZobrist();
     Board myBoard;
@@ -1063,3 +1079,4 @@ int main() {
     uciLoop(myBoard);
     return 0;
 }
+#endif
