@@ -1,6 +1,6 @@
-# GrandmasterZero
+# Ply
 
-GrandmasterZero is a high-performance, UCI-compatible chess engine written in C++. It utilizes advanced bitboard techniques and modern search heuristics to achieve a competitive playing strength of approximately **2185 Elo**.
+Ply is a high-performance, UCI-compatible chess engine written in C++. It utilizes advanced bitboard techniques and modern search heuristics to achieve a competitive playing strength of approximately **2185 Elo**.
 
 ## Features
 
@@ -30,7 +30,7 @@ GrandmasterZero is a high-performance, UCI-compatible chess engine written in C+
 
 ## Building and Compiling
 
-GrandmasterZero can be compiled using `g++` with high optimization levels.
+Ply can be compiled using `g++` with high optimization levels.
 
 ### Requirements
 *   A C++17 compatible compiler (e.g., GCC, Clang, or MSVC).
@@ -44,7 +44,7 @@ g++ -O3 main.cpp board.cpp movegen.cpp search.cpp uci.cpp evaluate.cpp polyglot.
 
 ## Usage
 
-GrandmasterZero follows the **Universal Chess Interface (UCI)** protocol. You can run it directly from the command line or load it into any chess GUI that supports UCI (such as Arena, Cute Chess, or LucasChess).
+Ply follows the **Universal Chess Interface (UCI)** protocol. You can run it directly from the command line or load it into any chess GUI that supports UCI (such as Arena, Cute Chess, or LucasChess).
 
 ### Basic UCI Commands
 *   `uci`: Identify the engine and list supported options.
@@ -55,7 +55,7 @@ GrandmasterZero follows the **Universal Chess Interface (UCI)** protocol. You ca
 
 ## Performance
 
-In testing against established benchmarks (Stockfish 2200), GrandmasterZero maintains a competitive performance level:
+In testing against established benchmarks (Stockfish 2200), Ply maintains a competitive performance level:
 *   **Estimated Strength:** ~2185 Elo
 *   **Nodes Per Second (NPS):** ~1.8M - 2.5M (depending on hardware)
 
