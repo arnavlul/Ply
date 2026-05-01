@@ -174,12 +174,22 @@ int Board::negamax(int depth, int alpha, int beta, int ply, uint16_t& bestMoveOu
         int legalMoves = 0;
         int bestScore = -1000000;
         uint16_t localBestMove = 0;
+        int quietMovesSeen = 0;
 
         for (auto& sm : scoredMoves) {
             bool isCapture = getFlags(sm.move) & CAPTURE;
             bool isPromo = getFlags(sm.move) >= PROMO_KNIGHT;
 
             if (futilityPruning && !isCapture && !isPromo) continue;
+
+            // Late Move Pruning (LMP)
+            if (!isCapture && !isPromo) {
+                quietMovesSeen++;
+                const int lmpCounts[] = {0, 5, 10, 20};
+                if (depth <= 3 && !isCheck && quietMovesSeen > lmpCounts[depth]) {
+                    continue;
+                }
+            }
 
             UndoInfo undo;
             if (makeMove(sm.move, undo)) {

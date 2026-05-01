@@ -13,7 +13,7 @@ void uciLoop(Board& myBoard) {
         ss >> token;
         if (token == "uci") {
             stopSearching();
-            cout << "id name GrandmasterZero" << endl;
+            cout << "id name Ply" << endl;
             cout << "id author Arnav" << endl;
             cout << "uciok" << endl;
         } else if (token == "isready") {

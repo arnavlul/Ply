@@ -9,6 +9,7 @@ Ply is a high-performance, UCI-compatible chess engine written in C++. It utiliz
 *   **Negamax with Alpha-Beta Pruning:** Optimized minimax search.
 *   **Quiescence Search:** Prevents the "horizon effect" by searching tactical captures until stability.
 *   **Null Move Pruning (NMP):** Efficiently prunes branches where the opponent has no immediate threats.
+*   **Late Move Pruning (LMP):** Aggressively prunes quiet moves at low depths (1-3) to focus on critical variations.
 *   **Late Move Reduction (LMR):** Searches quiet, late moves at shallower depths to save time.
 *   **Aspiration Windows:** Narrows search bounds around previous scores for faster cutoffs.
 *   **Check Extensions:** Searches tactical check positions more deeply.
