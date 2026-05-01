@@ -58,7 +58,7 @@ Ply follows the **Universal Chess Interface (UCI)** protocol. You can run it dir
 ## Performance
 
 In testing against established benchmarks (Stockfish 2200), Ply maintains a competitive performance level:
-*   **Estimated Strength:** ~2400 Elo (2266-2332 Elo)
+*   **Estimated Strength:** ~2400 Elo
 *   **Nodes Per Second (NPS):** ~1.1 - 1.2M (depending on hardware)
 
 ## License
