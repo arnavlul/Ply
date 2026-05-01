@@ -1,4 +1,6 @@
 #include "board.h"
+#include "magics.h"
+
 Evaluation::Score Board::evaluatePiece(uint64_t bb, int val, const Evaluation::Score pst[64], bool white) const {
 
         Evaluation::Score s = {0, 0};
@@ -706,8 +708,10 @@ void Board::parseFEN(const string& fen)  {
 
 uint16_t Board::parseMove(string moveStr)  {
 
-        vector<uint16_t> moves = generateMoves(sideToMove);
-        for (uint16_t move : moves) {
+        MoveList list;
+        generateMoves(sideToMove, list);
+        for (int i = 0; i < list.count; i++) {
+            uint16_t move = list.moves[i];
             if (moveToString(move) == moveStr) {
                 UndoInfo undo;
                 if (makeMove(move, undo)) {
@@ -717,7 +721,7 @@ uint16_t Board::parseMove(string moveStr)  {
             }
         }
         return 0;
-    
+
 }
 
 void Board::init()  {
@@ -730,7 +734,8 @@ void Board::init()  {
         clearSearchState();
         resetBoard();
         calculateLeapers();
-    
+        Magics::init();
+
 }
 
 string Board::squareToCoord(int sq)  {
@@ -755,8 +760,10 @@ uint64_t Board::perft(int depth)  {
 
         if (depth == 0) return 1ULL;
         uint64_t nodes = 0;
-        vector<uint16_t> moves = generateMoves(sideToMove);
-        for (uint16_t move : moves) {
+        MoveList list;
+        generateMoves(sideToMove, list);
+        for (int i = 0; i < list.count; i++) {
+            uint16_t move = list.moves[i];
             UndoInfo undo;
             if (makeMove(move, undo)) { nodes += perft(depth - 1); unmakeMove(move, undo); }
         }
@@ -767,8 +774,10 @@ uint64_t Board::perft(int depth)  {
 void Board::perftDivide(int depth)  {
 
         uint64_t totalNodes = 0;
-        vector<uint16_t> moves = generateMoves(sideToMove);
-        for (uint16_t move : moves) {
+        MoveList list;
+        generateMoves(sideToMove, list);
+        for (int i = 0; i < list.count; i++) {
+            uint16_t move = list.moves[i];
             UndoInfo undo;
             if (makeMove(move, undo)) { uint64_t nodes = perft(depth - 1); unmakeMove(move, undo); cout << moveToString(move) << ": " << nodes << endl; totalNodes += nodes; }
         }

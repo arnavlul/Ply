@@ -97,6 +97,17 @@ public:
         uint64_t hashKey;
     };
 
+    struct MoveList {
+        uint16_t moves[256];
+        int count = 0;
+        inline void add(uint16_t move) { moves[count++] = move; }
+    };
+
+    struct ScoredMove {
+        uint16_t move;
+        int score;
+    };
+
     enum MoveFlags {
         QUIET = 0,
         DOUBLE_PUSH = 1,
@@ -168,23 +179,23 @@ public:
 
     uint64_t attackedSquares(bool side) const;
 
-    void generateRookMoves(uint64_t rookBoard, uint64_t occupied, uint64_t friendly, vector<uint16_t>& moveset) const;
+    void generateRookMoves(uint64_t rookBoard, uint64_t occupied, uint64_t friendly, MoveList& moveset) const;
 
-    void generateBishopMoves(uint64_t bishopBoard, uint64_t occupied, uint64_t friendly, vector<uint16_t>& moveset) const;
+    void generateBishopMoves(uint64_t bishopBoard, uint64_t occupied, uint64_t friendly, MoveList& moveset) const;
 
-    void generateQueenMoves(uint64_t queenBoard, uint64_t occupied, uint64_t friendly, vector<uint16_t>& moveset) const;
+    void generateQueenMoves(uint64_t queenBoard, uint64_t occupied, uint64_t friendly, MoveList& moveset) const;
 
-    void generateKnightMoves(uint64_t knightBoard, uint64_t occupied, uint64_t friendly, vector<uint16_t>& moveset) const;
+    void generateKnightMoves(uint64_t knightBoard, uint64_t occupied, uint64_t friendly, MoveList& moveset) const;
 
-    void generateKingMoves(uint64_t kingBoard, uint64_t occupied, uint64_t friendly, vector<uint16_t>& moveset) const;
+    void generateKingMoves(uint64_t kingBoard, uint64_t occupied, uint64_t friendly, MoveList& moveset) const;
 
-    void generateCastlingMoves(bool side, uint64_t occupied, vector<uint16_t>& moveSet) const;
+    void generateCastlingMoves(bool side, uint64_t occupied, MoveList& moveSet) const;
 
-    void generateWhitePawnMoves(uint64_t whitePawns, uint64_t occupied, uint64_t friendly, vector<uint16_t>& moveSet) const;
+    void generateWhitePawnMoves(uint64_t whitePawns, uint64_t occupied, uint64_t friendly, MoveList& moveSet) const;
 
-    void generateBlackPawnMoves(uint64_t blackPawns, uint64_t occupied, uint64_t friendly, vector<uint16_t>& moveSet) const;
+    void generateBlackPawnMoves(uint64_t blackPawns, uint64_t occupied, uint64_t friendly, MoveList& moveSet) const;
 
-    vector<uint16_t> generateMoves(bool side) const;
+    void generateMoves(bool side, MoveList& list) const;
 
     string squareToCoord(int sq) ;
 

@@ -71,17 +71,24 @@ int Board::quiescence(int alpha, int beta)  {
         if (standPat >= beta) return beta;
         if (alpha < standPat) alpha = standPat;
 
-        vector<uint16_t> moves = generateMoves(sideToMove);
-        struct ScoredMove { uint16_t move; int score; };
-        vector<ScoredMove> scoredMoves;
-        for (uint16_t m : moves) {
-            if (getFlags(m) & CAPTURE) scoredMoves.push_back({m, getMoveScore(m, 0, 0)});
+        MoveList list;
+        generateMoves(sideToMove, list);
+
+        ScoredMove scoredMoves[256];
+        int scoredCount = 0;
+        for (int i = 0; i < list.count; i++) {
+            uint16_t m = list.moves[i];
+            if (getFlags(m) & CAPTURE) {
+                scoredMoves[scoredCount++] = {m, getMoveScore(m, 0, 0)};
+            }
         }
-        sort(scoredMoves.begin(), scoredMoves.end(), [](const ScoredMove& a, const ScoredMove& b) {
+
+        sort(scoredMoves, scoredMoves + scoredCount, [](const ScoredMove& a, const ScoredMove& b) {
             return a.score > b.score;
         });
 
-        for (auto& sm : scoredMoves) {
+        for (int i = 0; i < scoredCount; i++) {
+            auto& sm = scoredMoves[i];
             // Delta Pruning
             int victimType = getPieceAt(getTo(sm.move), !sideToMove);
             if (getFlags(sm.move) == EP_CAPTURE) victimType = PAWN;
@@ -170,13 +177,17 @@ int Board::negamax(int depth, int alpha, int beta, int ply, uint16_t& bestMoveOu
             futilityPruning = true;
         }
 
-        vector<uint16_t> moves = generateMoves(sideToMove);
-        struct ScoredMove { uint16_t move; int score; };
-        vector<ScoredMove> scoredMoves;
+        MoveList list;
+        generateMoves(sideToMove, list);
+
+        ScoredMove scoredMoves[256];
+        int scoredCount = 0;
         uint16_t bestMoveThisNode = ttMove ? ttMove : pvMove;
-        for (uint16_t m : moves) scoredMoves.push_back({m, getMoveScore(m, bestMoveThisNode, ply)});
+        for (int i = 0; i < list.count; i++) {
+            scoredMoves[scoredCount++] = {list.moves[i], getMoveScore(list.moves[i], bestMoveThisNode, ply)};
+        }
         
-        sort(scoredMoves.begin(), scoredMoves.end(), [](const ScoredMove& a, const ScoredMove& b) {
+        sort(scoredMoves, scoredMoves + scoredCount, [](const ScoredMove& a, const ScoredMove& b) {
             return a.score > b.score;
         });
 
@@ -185,7 +196,8 @@ int Board::negamax(int depth, int alpha, int beta, int ply, uint16_t& bestMoveOu
         uint16_t localBestMove = 0;
         int quietMovesSeen = 0;
 
-        for (auto& sm : scoredMoves) {
+        for (int i = 0; i < scoredCount; i++) {
+            auto& sm = scoredMoves[i];
             bool isCapture = getFlags(sm.move) & CAPTURE;
             bool isPromo = getFlags(sm.move) >= PROMO_KNIGHT;
 
@@ -250,8 +262,8 @@ int Board::negamax(int depth, int alpha, int beta, int ply, uint16_t& bestMoveOu
 
                         // History Malus (Penalty for other quiet moves)
                         int penalty = -depth * depth;
-                        for (auto& prevSm : scoredMoves) {
-                            if (prevSm.move == sm.move) break;
+                        for (int j = 0; j < i; j++) {
+                            auto& prevSm = scoredMoves[j];
                             if (!(getFlags(prevSm.move) & CAPTURE) && !(getFlags(prevSm.move) >= PROMO_KNIGHT)) {
                                 auto& hp = historyHeuristic[sideToMove][getFrom(prevSm.move)][getTo(prevSm.move)];
                                 hp += penalty - hp * abs(penalty) / 16384;
@@ -305,8 +317,10 @@ uint16_t Board::search(const SearchLimits& limits)  {
 
         uint16_t bestMove = 0;
         // Fallback: get the first legal move
-        vector<uint16_t> allMoves = generateMoves(sideToMove);
-        for (uint16_t m : allMoves) {
+        MoveList allMoves;
+        generateMoves(sideToMove, allMoves);
+        for (int i = 0; i < allMoves.count; i++) {
+            uint16_t m = allMoves.moves[i];
             UndoInfo undo;
             if (makeMove(m, undo)) {
                 unmakeMove(m, undo);

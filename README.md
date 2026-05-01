@@ -26,6 +26,7 @@ Ply is a high-performance, UCI-compatible chess engine written in C++. It utiliz
 
 ### Technical Implementation
 *   **Bitboards:** Efficient board representation using 64-bit integers.
+*   **Magic Bitboards:** High-performance sliding piece move generation (Rooks and Bishops).
 *   **Transposition Table (TT):** Stores previously searched positions with Zobrist hashing.
 *   **Opening Book:** Supports Polyglot (`.bin`) opening books for diverse and strong early play.
 *   **Move Ordering:** TT moves, **Static Exchange Evaluation (SEE)**, Killer Moves, and **History Gravity** (with malus).
@@ -41,7 +42,7 @@ Ply can be compiled using `g++` with high optimization levels.
 To build the engine, run the following command in the root directory:
 
 ```bash
-g++ -O3 board.cpp evaluate.cpp movegen.cpp polyglot.cpp uci.cpp search.cpp main.cpp -o engine.exe
+g++ -O3 board.cpp evaluate.cpp movegen.cpp polyglot.cpp uci.cpp search.cpp magics.cpp main.cpp -o engine.exe
 ```
 
 ## Usage
@@ -58,7 +59,7 @@ Ply follows the **Universal Chess Interface (UCI)** protocol. You can run it dir
 ## Performance
 
 In testing against established benchmarks (Stockfish 2200), Ply maintains a competitive performance level:
-*   **Estimated Strength:** ~2370 Elo
+*   **Estimated Strength:** ~2450 Elo
 *   **Nodes Per Second (NPS):** ~1.1 - 1.2M (depending on hardware)
 
 ## License

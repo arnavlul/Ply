@@ -267,8 +267,10 @@ namespace Polyglot {
         int from = from_r * 8 + from_f;
         int to = to_r * 8 + to_f;
         
-        vector<uint16_t> legalMoves = board.generateMoves(board.getSideToMove());
-        for (uint16_t m : legalMoves) {
+        Board::MoveList legalMoves;
+        board.generateMoves(board.getSideToMove(), legalMoves);
+        for (int i = 0; i < legalMoves.count; i++) {
+            uint16_t m = legalMoves.moves[i];
             if (Board::getFrom(m) == from && Board::getTo(m) == to) {
                 int m_flags = Board::getFlags(m);
                 if (promo == 0) {
