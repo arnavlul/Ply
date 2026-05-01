@@ -182,18 +182,22 @@ int Board::negamax(int depth, int alpha, int beta, int ply, uint16_t& bestMoveOu
 
             if (futilityPruning && !isCapture && !isPromo) continue;
 
-            // Late Move Pruning (LMP)
-            if (!isCapture && !isPromo) {
-                quietMovesSeen++;
-                const int lmpCounts[] = {0, 5, 10, 20};
-                if (depth <= 3 && !isCheck && quietMovesSeen > lmpCounts[depth]) {
-                    continue;
-                }
-            }
-
             UndoInfo undo;
             if (makeMove(sm.move, undo)) {
                 legalMoves++;
+                
+                // Late Move Pruning (LMP)
+                if (!isCapture && !isPromo && !isCheck) {
+                    bool givesCheck = inCheck(sideToMove);
+                    if (!givesCheck) {
+                        quietMovesSeen++;
+                        const int lmpCounts[] = {0, 8, 15, 30};
+                        if (depth <= 3 && quietMovesSeen >= lmpCounts[depth]) {
+                            unmakeMove(sm.move, undo);
+                            continue;
+                        }
+                    }
+                }
                 
                 uint16_t dummy;
                 int score;
@@ -202,17 +206,9 @@ int Board::negamax(int depth, int alpha, int beta, int ply, uint16_t& bestMoveOu
                 int ext = (inCheck(sideToMove) && ply < 128) ? 1 : 0;
 
                 // LMR
-                if (legalMoves >= 4 && depth >= 3 && ext == 0 && !isCheck) {
-                    bool shouldReduce = false;
-                    if (!isCapture && !isPromo) shouldReduce = true;
-                    else if (isCapture && see(sm.move) < 0) shouldReduce = true;
-
-                    if (shouldReduce) {
-                        score = -negamax(depth - 2, -alpha - 1, -alpha, ply + 1, dummy, 0);
-                        if (score > alpha) {
-                            score = -negamax(depth - 1 + ext, -beta, -alpha, ply + 1, dummy, 0);
-                        }
-                    } else {
+                if (legalMoves >= 4 && depth >= 3 && !isCapture && !isPromo && ext == 0 && !isCheck) {
+                    score = -negamax(depth - 2, -alpha - 1, -alpha, ply + 1, dummy, 0);
+                    if (score > alpha) {
                         score = -negamax(depth - 1 + ext, -beta, -alpha, ply + 1, dummy, 0);
                     }
                 } else {
