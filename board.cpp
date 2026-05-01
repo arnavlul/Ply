@@ -419,9 +419,8 @@ int Board::getMoveScore(uint16_t move, uint16_t hashMove, int ply) const {
         if (flags & CAPTURE) {
             int score = see(move);
             if (score >= 0) return 1000000 + score;
-            return 100000 + score; // Bad capture, but still scored above quiet moves? 
-                                   // Actually, usually bad captures are below quiet moves.
-                                   // Let's put them below history but above bad quiets.
+            // Bad capture: Base 50000 + negative SEE (Range ~49,100 to 49,999)
+            return 50000 + score; 
         }
         
         if (ply < 128) {
@@ -429,7 +428,8 @@ int Board::getMoveScore(uint16_t move, uint16_t hashMove, int ply) const {
             if (killerMoves[ply][1] && move == killerMoves[ply][1]) return 800000;
         }
 
-        return historyHeuristic[sideToMove][getFrom(move)][getTo(move)];
+        // Quiet move: Base 50000 + History (Range ~33,616 to 66,384)
+        return 50000 + historyHeuristic[sideToMove][getFrom(move)][getTo(move)];
     
 }
 
@@ -727,6 +727,7 @@ void Board::init()  {
         castlingMask[56] = 7; castlingMask[63] = 11; castlingMask[60] = 3;
         tt.resize(TT_SIZE);
         clearTT();
+        clearSearchState();
         resetBoard();
         calculateLeapers();
     
