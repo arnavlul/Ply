@@ -13,7 +13,7 @@ Ply is a high-performance, UCI-compatible chess engine written in C++. It utiliz
 *   **Late Move Reduction (LMR):** Searches quiet, late moves at shallower depths to save time.
 *   **Aspiration Windows:** Narrows search bounds around previous scores for faster cutoffs.
 *   **Check Extensions:** Searches tactical check positions more deeply.
-*   **Pruning:** Includes Futility Pruning, Delta Pruning (in Quiescence), and SEE Pruning.
+*   **Pruning:** Includes Futility Pruning, Delta Pruning (in Quiescence), SEE Pruning, and Razoring.
 *   **Draw Detection:** Handles three-fold repetition and the 50-move rule correctly.
 
 ### Evaluation
@@ -58,7 +58,7 @@ Ply follows the **Universal Chess Interface (UCI)** protocol. You can run it dir
 ## Performance
 
 In testing against established benchmarks (Stockfish 2200), Ply maintains a competitive performance level:
-*   **Estimated Strength:** ~2299 Elo (2266-2332 Elo)
+*   **Estimated Strength:** ~2400 Elo (2266-2332 Elo)
 *   **Nodes Per Second (NPS):** ~1.1 - 1.2M (depending on hardware)
 
 ## License

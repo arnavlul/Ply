@@ -140,6 +140,15 @@ int Board::negamax(int depth, int alpha, int beta, int ply, uint16_t& bestMoveOu
 
         int staticEval = evaluate();
 
+        // Razoring
+        if (depth <= 3 && !isCheck) {
+            int margin = depth * 300;
+            if (staticEval + margin < alpha) {
+                int qScore = quiescence(alpha, beta);
+                if (qScore <= alpha) return qScore;
+            }
+        }
+
         // Null Move Pruning
         if (depth >= 3 && !isCheck && ply > 0 && staticEval >= beta) {
             uint64_t majorPieces = sideToMove ? (whiteKnight | whiteBishop | whiteRook | whiteQueen) 

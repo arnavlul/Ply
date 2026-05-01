@@ -374,16 +374,18 @@ int Board::see(uint16_t move) const {
     if (flags == EP_CAPTURE) capturedPieceType = PAWN;
     
     int attackingPieceType = getPieceAt(from, sideToMove);
+    int promoValue = 0;
     if (flags >= PROMO_KNIGHT) {
         int pt = flags & 3;
         if (pt == 0) attackingPieceType = KNIGHT;
         else if (pt == 1) attackingPieceType = BISHOP;
         else if (pt == 2) attackingPieceType = ROOK;
         else if (pt == 3) attackingPieceType = QUEEN;
+        promoValue = pieceValue[attackingPieceType] - 100;
     }
 
     int score[32];
-    score[0] = pieceValue[capturedPieceType];
+    score[0] = pieceValue[capturedPieceType] + promoValue;
     int n = 1;
 
     uint64_t occupied = (whitePawn | whiteKnight | whiteBishop | whiteRook | whiteQueen | whiteKing |
