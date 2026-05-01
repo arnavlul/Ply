@@ -240,12 +240,23 @@ int Board::negamax(int depth, int alpha, int beta, int ply, uint16_t& bestMoveOu
                     pvLength[ply] = pvLength[ply + 1];
                 }
                 if (alpha >= beta) {
-                    if (!(getFlags(sm.move) & CAPTURE) && ply < 128) {
+                    if (!(getFlags(sm.move) & CAPTURE) && !(getFlags(sm.move) >= PROMO_KNIGHT) && ply < 128) {
                         killerMoves[ply][1] = killerMoves[ply][0];
                         killerMoves[ply][0] = sm.move;
+                        
+                        int bonus = depth * depth;
                         auto& h = historyHeuristic[sideToMove][getFrom(sm.move)][getTo(sm.move)];
-                        h += depth * depth;
-                        if (h > 1000000) h = 1000000;
+                        h += bonus - h * abs(bonus) / 16384;
+
+                        // History Malus (Penalty for other quiet moves)
+                        int penalty = -depth * depth;
+                        for (auto& prevSm : scoredMoves) {
+                            if (prevSm.move == sm.move) break;
+                            if (!(getFlags(prevSm.move) & CAPTURE) && !(getFlags(prevSm.move) >= PROMO_KNIGHT)) {
+                                auto& hp = historyHeuristic[sideToMove][getFrom(prevSm.move)][getTo(prevSm.move)];
+                                hp += penalty - hp * abs(penalty) / 16384;
+                            }
+                        }
                     }
                     break;
                 }
@@ -273,8 +284,6 @@ uint16_t Board::search(const SearchLimits& limits)  {
         nodes = 0;
         startTime = chrono::steady_clock::now();
         
-        for (int s = 0; s < 2; s++) for (int f = 0; f < 64; f++) for (int t = 0; t < 64; t++) historyHeuristic[s][f][t] = 0;
-
         uint64_t polyglotHash = getPolyglotHash();
         uint16_t bookMove = Polyglot::getBookMove(polyglotHash, *this);
         if (bookMove != 0) {

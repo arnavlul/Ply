@@ -28,7 +28,7 @@ Ply is a high-performance, UCI-compatible chess engine written in C++. It utiliz
 *   **Bitboards:** Efficient board representation using 64-bit integers.
 *   **Transposition Table (TT):** Stores previously searched positions with Zobrist hashing.
 *   **Opening Book:** Supports Polyglot (`.bin`) opening books for diverse and strong early play.
-*   **Move Ordering:** Combines TT moves, **Static Exchange Evaluation (SEE)**, Killer Moves, and History Heuristics.
+*   **Move Ordering:** TT moves, **Static Exchange Evaluation (SEE)**, Killer Moves, and **History Gravity** (with malus).
 
 ## Building and Compiling
 
@@ -58,7 +58,7 @@ Ply follows the **Universal Chess Interface (UCI)** protocol. You can run it dir
 ## Performance
 
 In testing against established benchmarks (Stockfish 2200), Ply maintains a competitive performance level:
-*   **Estimated Strength:** ~2400 Elo
+*   **Estimated Strength:** ~2450 Elo
 *   **Nodes Per Second (NPS):** ~1.1 - 1.2M (depending on hardware)
 
 ## License
