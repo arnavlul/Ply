@@ -21,6 +21,7 @@ void uciLoop(Board& myBoard) {
         } else if (token == "ucinewgame") {
             stopSearching();
             myBoard.clearTT();
+            myBoard.clearSearchState();
             myBoard.parseFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
         } else if (token == "position") {
             stopSearching();

@@ -5,6 +5,15 @@ void Board::clearTT()  {
     
 }
 
+void Board::clearSearchState() {
+    for (int i = 0; i < 128; i++) killerMoves[i][0] = killerMoves[i][1] = 0;
+    for (int s = 0; s < 2; s++) 
+        for (int f = 0; f < 64; f++) 
+            for (int t = 0; t < 64; t++) 
+                historyHeuristic[s][f][t] = 0;
+    for (int i = 0; i < 128; i++) pvLength[i] = 0;
+}
+
 int Board::scoreToTT(int score, int ply)  {
 
         if (score > 49000) return score + ply;
@@ -89,6 +98,9 @@ int Board::quiescence(int alpha, int beta)  {
 
             if (standPat + victimValue + 200 < alpha) continue;
 
+            // SEE Pruning
+            if (see(sm.move) < 0) continue;
+
             UndoInfo undo;
             if (makeMove(sm.move, undo)) {
                 int score = -quiescence(-beta, -alpha);
@@ -108,15 +120,13 @@ int Board::negamax(int depth, int alpha, int beta, int ply, uint16_t& bestMoveOu
         if (nodes % 2048 == 0) checkTime();
         if (stopSearch) return 0;
 
+        pvLength[ply] = ply;
+
         if (ply > 0) {
-            if (halfmoveClock >= 100) return 0;
-            for (int i = historyIndex - 2; i >= historyIndex - halfmoveClock - 1 && i >= 0; i--) {
-                if (historyStack[i] == hashKey) return 0;
-            }
+            if (halfmoveClock >= 100 || isRepetition()) return 0;
         }
 
         bool isCheck = inCheck(sideToMove);
-        if (isCheck) depth++;
 
         int oldAlpha = alpha;
         uint16_t ttMove = 0;
@@ -138,7 +148,8 @@ int Board::negamax(int depth, int alpha, int beta, int ply, uint16_t& bestMoveOu
                 UndoInfo undo;
                 makeNullMove(undo);
                 uint16_t dummy;
-                int score = -negamax(depth - 1 - 2, -beta, -beta + 1, ply + 1, dummy, 0);
+                int R = depth >= 6 ? 3 : 2;
+                int score = -negamax(depth - 1 - R, -beta, -beta + 1, ply + 1, dummy, 0);
                 unmakeNullMove(undo);
                 if (score >= beta) return beta;
             }
@@ -177,14 +188,25 @@ int Board::negamax(int depth, int alpha, int beta, int ply, uint16_t& bestMoveOu
                 uint16_t dummy;
                 int score;
 
+                // Check Extension (we gave check)
+                int ext = (inCheck(sideToMove) && ply < 128) ? 1 : 0;
+
                 // LMR
-                if (legalMoves >= 4 && depth >= 3 && !isCapture && !isPromo && !inCheck(sideToMove)) {
-                    score = -negamax(depth - 2, -alpha - 1, -alpha, ply + 1, dummy, 0);
-                    if (score > alpha) {
-                        score = -negamax(depth - 1, -beta, -alpha, ply + 1, dummy, 0);
+                if (legalMoves >= 4 && depth >= 3 && ext == 0 && !isCheck) {
+                    bool shouldReduce = false;
+                    if (!isCapture && !isPromo) shouldReduce = true;
+                    else if (isCapture && see(sm.move) < 0) shouldReduce = true;
+
+                    if (shouldReduce) {
+                        score = -negamax(depth - 2, -alpha - 1, -alpha, ply + 1, dummy, 0);
+                        if (score > alpha) {
+                            score = -negamax(depth - 1 + ext, -beta, -alpha, ply + 1, dummy, 0);
+                        }
+                    } else {
+                        score = -negamax(depth - 1 + ext, -beta, -alpha, ply + 1, dummy, 0);
                     }
                 } else {
-                    score = -negamax(depth - 1, -beta, -alpha, ply + 1, dummy, 0);
+                    score = -negamax(depth - 1 + ext, -beta, -alpha, ply + 1, dummy, 0);
                 }
 
                 unmakeMove(sm.move, undo);
@@ -197,12 +219,18 @@ int Board::negamax(int depth, int alpha, int beta, int ply, uint16_t& bestMoveOu
                 }
                 if (score > alpha) {
                     alpha = score;
+                    pvTable[ply][ply] = sm.move;
+                    for (int i = ply + 1; i < pvLength[ply + 1]; i++)
+                        pvTable[ply][i] = pvTable[ply + 1][i];
+                    pvLength[ply] = pvLength[ply + 1];
                 }
                 if (alpha >= beta) {
                     if (!(getFlags(sm.move) & CAPTURE) && ply < 128) {
                         killerMoves[ply][1] = killerMoves[ply][0];
                         killerMoves[ply][0] = sm.move;
-                        historyHeuristic[sideToMove][getFrom(sm.move)][getTo(sm.move)] += depth * depth;
+                        auto& h = historyHeuristic[sideToMove][getFrom(sm.move)][getTo(sm.move)];
+                        h += depth * depth;
+                        if (h > 1000000) h = 1000000;
                     }
                     break;
                 }
@@ -230,7 +258,6 @@ uint16_t Board::search(const SearchLimits& limits)  {
         nodes = 0;
         startTime = chrono::steady_clock::now();
         
-        for (int i = 0; i < 128; i++) killerMoves[i][0] = killerMoves[i][1] = 0;
         for (int s = 0; s < 2; s++) for (int f = 0; f < 64; f++) for (int t = 0; t < 64; t++) historyHeuristic[s][f][t] = 0;
 
         uint64_t polyglotHash = getPolyglotHash();
@@ -267,9 +294,12 @@ uint16_t Board::search(const SearchLimits& limits)  {
         int alpha = -1000000;
         int beta = 1000000;
         int prevScore = 0;
+        bool aspirationValid = false;
 
         for (int d = 1; d <= limits.depth; d++) {
-            if (d >= 5) {
+            for (int i = 0; i < 128; i++) killerMoves[i][0] = killerMoves[i][1] = 0;
+
+            if (d >= 5 && aspirationValid) {
                 alpha = prevScore - 50;
                 beta = prevScore + 50;
             } else {
@@ -282,7 +312,10 @@ uint16_t Board::search(const SearchLimits& limits)  {
                 uint16_t currentBest = 0;
                 score = negamax(d, alpha, beta, 0, currentBest, bestMove);
                 
-                if (stopSearch) break;
+                if (stopSearch) {
+                    if (currentBest != 0) bestMove = currentBest;
+                    break;
+                }
 
                 if (score <= alpha) {
                     alpha -= 200;
@@ -292,6 +325,7 @@ uint16_t Board::search(const SearchLimits& limits)  {
                     if (beta > 1000000) beta = 1000000;
                 } else {
                     prevScore = score;
+                    aspirationValid = true;
                     if (currentBest != 0) bestMove = currentBest;
                     break;
                 }
@@ -302,7 +336,20 @@ uint16_t Board::search(const SearchLimits& limits)  {
             auto now = chrono::steady_clock::now();
             auto elapsed = chrono::duration_cast<chrono::milliseconds>(now - startTime).count();
             if (elapsed == 0) elapsed = 1;
-            cout << "info depth " << d << " score cp " << prevScore << " nodes " << nodes << " time " << elapsed << " nps " << (nodes * 1000 / elapsed) << " pv " << moveToString(bestMove) << endl;
+
+            string pvStr = "";
+            for (int i = 0; i < pvLength[0]; i++)
+                pvStr += moveToString(pvTable[0][i]) + " ";
+
+            string scoreStr;
+            if (prevScore > 49000)
+                scoreStr = "mate " + to_string((50000 - prevScore + 1) / 2);
+            else if (prevScore < -49000)
+                scoreStr = "mate -" + to_string((50000 + prevScore + 1) / 2);
+            else
+                scoreStr = "cp " + to_string(prevScore);
+
+            cout << "info depth " << d << " score " << scoreStr << " nodes " << nodes << " time " << elapsed << " nps " << (nodes * 1000 / elapsed) << " pv " << pvStr << endl;
             
             if (limits.infinite == false && timeLimit != -1 && elapsed > timeLimit / 2) break; 
         }

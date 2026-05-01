@@ -12,7 +12,8 @@ Ply is a high-performance, UCI-compatible chess engine written in C++. It utiliz
 *   **Late Move Reduction (LMR):** Searches quiet, late moves at shallower depths to save time.
 *   **Aspiration Windows:** Narrows search bounds around previous scores for faster cutoffs.
 *   **Check Extensions:** Searches tactical check positions more deeply.
-*   **Pruning:** Includes Futility Pruning and Delta Pruning (in Quiescence).
+*   **Pruning:** Includes Futility Pruning, Delta Pruning (in Quiescence), and SEE Pruning.
+*   **Draw Detection:** Handles three-fold repetition and the 50-move rule correctly.
 
 ### Evaluation
 *   **Material & PSQT:** Base evaluation using material weights and Piece-Square Tables.
@@ -26,7 +27,7 @@ Ply is a high-performance, UCI-compatible chess engine written in C++. It utiliz
 *   **Bitboards:** Efficient board representation using 64-bit integers.
 *   **Transposition Table (TT):** Stores previously searched positions with Zobrist hashing.
 *   **Opening Book:** Supports Polyglot (`.bin`) opening books for diverse and strong early play.
-*   **Move Ordering:** Combines TT moves, MVV-LVA (Most Valuable Victim - Least Valuable Attacker), Killer Moves, and History Heuristics.
+*   **Move Ordering:** Combines TT moves, **Static Exchange Evaluation (SEE)**, Killer Moves, and History Heuristics.
 
 ## Building and Compiling
 
@@ -39,7 +40,7 @@ Ply can be compiled using `g++` with high optimization levels.
 To build the engine, run the following command in the root directory:
 
 ```bash
-g++ -O3 main.cpp board.cpp movegen.cpp search.cpp uci.cpp evaluate.cpp polyglot.cpp -o engine.exe
+g++ -O3 board.cpp evaluate.cpp movegen.cpp polyglot.cpp uci.cpp search.cpp main.cpp -o engine.exe
 ```
 
 ## Usage

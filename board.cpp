@@ -135,12 +135,18 @@ int Board::evaluate() const {
         score -= evaluatePiece(blackKing, Evaluation::KING_VAL, Evaluation::king_pst, false);
 
         // Pawn Structure & Passed Pawns
+        for (int file = 0; file < 8; file++) {
+            int wCount = __builtin_popcountll(whitePawn & Evaluation::fileMasks[file]);
+            if (wCount > 1) score -= {Evaluation::DOUBLED_PAWN_PENALTY * (wCount - 1), Evaluation::DOUBLED_PAWN_PENALTY * (wCount - 1)};
+            
+            int bCount = __builtin_popcountll(blackPawn & Evaluation::fileMasks[file]);
+            if (bCount > 1) score += {Evaluation::DOUBLED_PAWN_PENALTY * (bCount - 1), Evaluation::DOUBLED_PAWN_PENALTY * (bCount - 1)};
+        }
+
         uint64_t wp = whitePawn;
         while (wp) {
             int sq = __builtin_ctzll(wp);
             int file = sq % 8;
-            // Doubled pawns
-            if (__builtin_popcountll(whitePawn & Evaluation::fileMasks[file]) > 1) score -= {Evaluation::DOUBLED_PAWN_PENALTY, Evaluation::DOUBLED_PAWN_PENALTY};
             // Isolated pawns
             if (!(whitePawn & Evaluation::adjacentFileMasks[file])) score -= {Evaluation::ISOLATED_PAWN_PENALTY, Evaluation::ISOLATED_PAWN_PENALTY};
             // Passed pawns
@@ -152,8 +158,6 @@ int Board::evaluate() const {
         while (bp) {
             int sq = __builtin_ctzll(bp);
             int file = sq % 8;
-            // Doubled pawns
-            if (__builtin_popcountll(blackPawn & Evaluation::fileMasks[file]) > 1) score += {Evaluation::DOUBLED_PAWN_PENALTY, Evaluation::DOUBLED_PAWN_PENALTY};
             // Isolated pawns
             if (!(blackPawn & Evaluation::adjacentFileMasks[file])) score += {Evaluation::ISOLATED_PAWN_PENALTY, Evaluation::ISOLATED_PAWN_PENALTY};
             // Passed pawns
@@ -273,35 +277,154 @@ bool Board::inCheck(bool side) const {
 
         uint64_t kingBB = side ? whiteKing : blackKing;
         return (attackedSquares(!side) & kingBB) != 0;
+
+}
+
+bool Board::isRepetition() const {
+    for (int i = historyIndex - 2; i >= historyIndex - halfmoveClock - 1 && i >= 0; i--) {
+        if (historyStack[i] == hashKey) return true;
+    }
+    return false;
+}
+
+uint64_t Board::getLeastValuableAttacker(int square, bool side, uint64_t& occupied, int& pieceType) const {
+    uint64_t attackers;
     
+    // Pawns
+    attackers = 0;
+    if (side) { // White attackers
+        if (square >= 7 && (square % 8 != 0) && (whitePawn & (1ULL << (square - 7)))) attackers |= (1ULL << (square - 7));
+        if (square >= 9 && (square % 8 != 7) && (whitePawn & (1ULL << (square - 9)))) attackers |= (1ULL << (square - 9));
+    } else { // Black attackers
+        if (square <= 56 && (square % 8 != 7) && (blackPawn & (1ULL << (square + 7)))) attackers |= (1ULL << (square + 7));
+        if (square <= 54 && (square % 8 != 0) && (blackPawn & (1ULL << (square + 9)))) attackers |= (1ULL << (square + 9));
+    }
+    if (attackers & occupied) {
+        pieceType = PAWN;
+        uint64_t bit = attackers & occupied;
+        bit = (1ULL << __builtin_ctzll(bit));
+        occupied ^= bit;
+        return bit;
+    }
+
+    // Knights
+    attackers = knightMoveMask[square] & (side ? whiteKnight : blackKnight);
+    if (attackers & occupied) {
+        pieceType = KNIGHT;
+        uint64_t bit = attackers & occupied;
+        bit = (1ULL << __builtin_ctzll(bit));
+        occupied ^= bit;
+        return bit;
+    }
+
+    // Bishops
+    attackers = getBishopAttacks(square, occupied) & (side ? whiteBishop : blackBishop);
+    if (attackers & occupied) {
+        pieceType = BISHOP;
+        uint64_t bit = attackers & occupied;
+        bit = (1ULL << __builtin_ctzll(bit));
+        occupied ^= bit;
+        return bit;
+    }
+
+    // Rooks
+    attackers = getRookMoves(square, occupied) & (side ? whiteRook : blackRook);
+    if (attackers & occupied) {
+        pieceType = ROOK;
+        uint64_t bit = attackers & occupied;
+        bit = (1ULL << __builtin_ctzll(bit));
+        occupied ^= bit;
+        return bit;
+    }
+
+    // Queens
+    attackers = (getBishopAttacks(square, occupied) | getRookMoves(square, occupied)) & (side ? whiteQueen : blackQueen);
+    if (attackers & occupied) {
+        pieceType = QUEEN;
+        uint64_t bit = attackers & occupied;
+        bit = (1ULL << __builtin_ctzll(bit));
+        occupied ^= bit;
+        return bit;
+    }
+
+    // Kings
+    attackers = kingMoveMask[square] & (side ? whiteKing : blackKing);
+    if (attackers & occupied) {
+        pieceType = KING;
+        uint64_t bit = attackers & occupied;
+        bit = (1ULL << __builtin_ctzll(bit));
+        occupied ^= bit;
+        return bit;
+    }
+
+    pieceType = NONE;
+    return 0;
+}
+
+int Board::see(uint16_t move) const {
+    int from = getFrom(move);
+    int to = getTo(move);
+    int flags = getFlags(move);
+    
+    int pieceValue[] = {0, 100, 320, 330, 500, 900, 20000};
+    
+    // The piece being captured at 'to' is the one that belongs to the opponent
+    // of the side making the move.
+    int capturedPieceType = getPieceAt(to, !sideToMove);
+    if (flags == EP_CAPTURE) capturedPieceType = PAWN;
+    
+    int attackingPieceType = getPieceAt(from, sideToMove);
+    if (flags >= PROMO_KNIGHT) {
+        int pt = flags & 3;
+        if (pt == 0) attackingPieceType = KNIGHT;
+        else if (pt == 1) attackingPieceType = BISHOP;
+        else if (pt == 2) attackingPieceType = ROOK;
+        else if (pt == 3) attackingPieceType = QUEEN;
+    }
+
+    int score[32];
+    score[0] = pieceValue[capturedPieceType];
+    int n = 1;
+
+    uint64_t occupied = (whitePawn | whiteKnight | whiteBishop | whiteRook | whiteQueen | whiteKing |
+                         blackPawn | blackKnight | blackBishop | blackRook | blackQueen | blackKing);
+    
+    occupied ^= (1ULL << from);
+    bool currentSide = !sideToMove; // The next side to move (the recycler)
+    int currentAttackerValue = pieceValue[attackingPieceType];
+
+    while (true) {
+        int nextPieceType;
+        uint64_t bit = getLeastValuableAttacker(to, currentSide, occupied, nextPieceType);
+        if (!bit) break;
+        
+        score[n] = currentAttackerValue - score[n-1];
+        currentAttackerValue = pieceValue[nextPieceType];
+        n++;
+        currentSide = !currentSide;
+    }
+
+    while (--n > 0) {
+        score[n-1] = -max(-score[n-1], score[n]);
+    }
+
+    return score[0];
 }
 
 int Board::getMoveScore(uint16_t move, uint16_t hashMove, int ply) const {
-
         if (move == hashMove) return 2000000;
         int flags = getFlags(move);
         if (flags & CAPTURE) {
-            int attacker = getPieceAt(getFrom(move), sideToMove);
-            int victim = getPieceAt(getTo(move), !sideToMove);
-            if (flags == EP_CAPTURE) victim = PAWN;
-            
-            auto getVal = [](int t) {
-                switch(t) {
-                    case PAWN: return 1;
-                    case KNIGHT: return 2;
-                    case BISHOP: return 3;
-                    case ROOK: return 4;
-                    case QUEEN: return 5;
-                    case KING: return 6;
-                    default: return 0;
-                }
-            };
-            return 1000000 + (getVal(victim) * 10) - getVal(attacker);
+            int score = see(move);
+            if (score >= 0) return 1000000 + score;
+            return 100000 + score; // Bad capture, but still scored above quiet moves? 
+                                   // Actually, usually bad captures are below quiet moves.
+                                   // Let's put them below history but above bad quiets.
         }
         
         if (ply < 128) {
-            if (move == killerMoves[ply][0]) return 900000;
-            if (move == killerMoves[ply][1]) return 800000;
+            if (killerMoves[ply][0] && move == killerMoves[ply][0]) return 900000;
+            if (killerMoves[ply][1] && move == killerMoves[ply][1]) return 800000;
         }
 
         return historyHeuristic[sideToMove][getFrom(move)][getTo(move)];
@@ -474,12 +597,9 @@ void Board::makeNullMove(UndoInfo& undo) {
 
     halfmoveClock++;
     if (!side) fullmoveNumber++;
-
-    historyStack[historyIndex++] = hashKey;
 }
 
 void Board::unmakeNullMove(const UndoInfo& undo) {
-    historyIndex--;
     bool side = !sideToMove; // The side that made the null move
     if (!side) fullmoveNumber--;
     

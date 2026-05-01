@@ -31,11 +31,14 @@ private:
     int halfmoveClock;
     int fullmoveNumber;
     uint64_t hashKey;
-    uint64_t historyStack[1024];
+    uint64_t historyStack[2048];
     int historyIndex;
 
-    uint16_t killerMoves[128][2];
+    uint16_t killerMoves[256][2];
     int historyHeuristic[2][64][64];
+
+    uint16_t pvTable[256][256];
+    int pvLength[256];
 
     Evaluation::Score evaluatePiece(uint64_t bb, int val, const Evaluation::Score pst[64], bool white) const;
 
@@ -69,6 +72,7 @@ public:
     const int TT_SIZE = 1000000;
 
     void clearTT() ;
+    void clearSearchState();
 
     int scoreToTT(int score, int ply) ;
 
@@ -121,6 +125,11 @@ public:
     int getPieceAt(int square, bool side) const;
 
     bool inCheck(bool side) const;
+
+    bool isRepetition() const;
+
+    int see(uint16_t move) const;
+    uint64_t getLeastValuableAttacker(int square, bool side, uint64_t& occupied, int& pieceType) const;
 
     int getMoveScore(uint16_t move, uint16_t hashMove, int ply) const;
 
