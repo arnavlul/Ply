@@ -16,13 +16,18 @@ Evaluation::Score Board::evaluatePiece(uint64_t bb, int val, const Evaluation::S
 }
 
 void Board::checkTime()  {
-
+        if (isPondering) return;
         if (timeLimit != -1) {
             auto now = chrono::steady_clock::now();
             auto elapsed = chrono::duration_cast<chrono::milliseconds>(now - startTime).count();
             if (elapsed >= timeLimit) stopSearch = true;
         }
     
+}
+
+uint16_t Board::getPonderMove() const {
+    if (pvLength[0] > 1) return pvTable[0][1];
+    return 0;
 }
 
 uint64_t Board::generateHashKey()  {

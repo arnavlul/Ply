@@ -15,6 +15,7 @@ void uciLoop(Board& myBoard) {
             stopSearching();
             cout << "id name Ply" << endl;
             cout << "id author Arnav" << endl;
+            cout << "option name Ponder type check default false" << endl;
             cout << "uciok" << endl;
         } else if (token == "isready") {
             cout << "readyok" << endl;
@@ -56,6 +57,7 @@ void uciLoop(Board& myBoard) {
             stopSearching();
             Board::SearchLimits limits;
             string sub;
+            myBoard.isPondering = false;
             while (ss >> sub) {
                 if (sub == "wtime") ss >> limits.wtime;
                 else if (sub == "btime") ss >> limits.btime;
@@ -65,12 +67,25 @@ void uciLoop(Board& myBoard) {
                 else if (sub == "depth") ss >> limits.depth;
                 else if (sub == "movetime") ss >> limits.movetime;
                 else if (sub == "infinite") limits.infinite = true;
+                else if (sub == "ponder") myBoard.isPondering = true;
             }
             myBoard.stopSearch = false;
             searchThread = thread([&myBoard, limits]() {
                 uint16_t bestMove = myBoard.search(limits);
-                cout << "bestmove " << myBoard.moveToString(bestMove) << endl;
+                
+                // If the search finishes while still pondering, wait for ponderhit or stop
+                while (myBoard.isPondering && !myBoard.stopSearch) {
+                    this_thread::sleep_for(chrono::milliseconds(10));
+                }
+
+                uint16_t ponderMove = myBoard.getPonderMove();
+                cout << "bestmove " << myBoard.moveToString(bestMove);
+                if (ponderMove) cout << " ponder " << myBoard.moveToString(ponderMove);
+                cout << endl;
             });
+        } else if (token == "ponderhit") {
+            myBoard.isPondering = false;
+            myBoard.startTime = chrono::steady_clock::now();
         } else if (token == "stop") {
             stopSearching();
         } else if (token == "quit") {

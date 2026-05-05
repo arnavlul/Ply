@@ -389,7 +389,7 @@ uint16_t Board::search(const SearchLimits& limits)  {
 
             cout << "info depth " << d << " score " << scoreStr << " nodes " << nodes << " time " << elapsed << " nps " << (nodes * 1000 / elapsed) << " pv " << pvStr << endl;
             
-            if (limits.infinite == false && timeLimit != -1 && elapsed > timeLimit / 2) break; 
+            if (!isPondering && limits.infinite == false && timeLimit != -1 && elapsed > timeLimit / 2) break; 
         }
         return bestMove;
     

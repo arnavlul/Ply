@@ -52,11 +52,13 @@ public:
     };
 
     std::atomic<bool> stopSearch{false};
+    std::atomic<bool> isPondering{false};
     chrono::time_point<chrono::steady_clock> startTime;
     long long timeLimit = 0;
     uint64_t nodes = 0;
 
     void checkTime() ;
+    uint16_t getPonderMove() const;
 
 
 
