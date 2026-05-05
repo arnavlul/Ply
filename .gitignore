@@ -22,6 +22,8 @@ build/
 GEMINI.md
 needs.txt
 image.png
+verify_ponder.py
+__pycache__/
 stockfish/
 Openings-EPD/
 config.json
