@@ -283,7 +283,13 @@ bool Board::inCheck(bool side) const {
 }
 
 bool Board::isRepetition() const {
-    for (int i = historyIndex - 2; i >= historyIndex - halfmoveClock - 1 && i >= 0; i--) {
+    // Current position is at historyIndex - 1.
+    // Check back to the last irreversible move.
+    int start = max(0, historyIndex - halfmoveClock - 1);
+    
+    // Positions only repeat on the same side's turn.
+    // i starts at historyIndex - 3 (the position 2 steps back from current).
+    for (int i = historyIndex - 3; i >= start; i -= 2) {
         if (historyStack[i] == hashKey) return true;
     }
     return false;
