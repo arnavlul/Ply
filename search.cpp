@@ -309,7 +309,7 @@ uint16_t Board::search(const SearchLimits& limits)  {
             int time = sideToMove ? limits.wtime : limits.btime;
             int inc = sideToMove ? limits.winc : limits.binc;
             int mtg = (limits.movestogo > 0) ? limits.movestogo : 50;
-            timeLimit = ((time / mtg) * (6/10)) + (inc * (8/10));
+            timeLimit = (int)(((double)(time / mtg) * (6.0/10.0)) + ((double)inc * (8.0/10.0)));
         } else {
             timeLimit = -1;
         }
