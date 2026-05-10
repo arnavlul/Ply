@@ -6,12 +6,12 @@ void Board::clearTT()  {
 }
 
 void Board::clearSearchState() {
-    for (int i = 0; i < 128; i++) killerMoves[i][0] = killerMoves[i][1] = 0;
+    for (int i = 0; i < 256; i++) killerMoves[i][0] = killerMoves[i][1] = 0;
     for (int s = 0; s < 2; s++) 
         for (int f = 0; f < 64; f++) 
             for (int t = 0; t < 64; t++) 
                 historyHeuristic[s][f][t] = 0;
-    for (int i = 0; i < 128; i++) pvLength[i] = 0;
+    for (int i = 0; i < 256; i++) pvLength[i] = 0;
 }
 
 int Board::scoreToTT(int score, int ply)  {
@@ -308,8 +308,8 @@ uint16_t Board::search(const SearchLimits& limits)  {
         } else if (sideToMove ? (limits.wtime != -1) : (limits.btime != -1)) {
             int time = sideToMove ? limits.wtime : limits.btime;
             int inc = sideToMove ? limits.winc : limits.binc;
-            int mtg = (limits.movestogo > 0) ? limits.movestogo : 30;
-            timeLimit = time / mtg + inc - 50;
+            int mtg = (limits.movestogo > 0) ? limits.movestogo : 50;
+            timeLimit = ((time / mtg) * (6/10)) + (inc * (8/10));
         } else {
             timeLimit = -1;
         }
@@ -334,18 +334,20 @@ uint16_t Board::search(const SearchLimits& limits)  {
         int prevScore = 0;
         bool aspirationValid = false;
 
-        for (int d = 1; d <= limits.depth; d++) {
-            for (int i = 0; i < 128; i++) killerMoves[i][0] = killerMoves[i][1] = 0;
+        for (int i = 0; i < 256; i++) killerMoves[i][0] = killerMoves[i][1] = 0;
 
+        for (int d = 1; d <= limits.depth; d++) {
+            
             if (d >= 5 && aspirationValid) {
-                alpha = prevScore - 50;
-                beta = prevScore + 50;
+                alpha = prevScore - 30;
+                beta = prevScore + 30;
             } else {
                 alpha = -1000000;
                 beta = 1000000;
             }
 
             int score = 0;
+            int delta = 40; 
             while (true) {
                 uint16_t currentBest = 0;
                 score = negamax(d, alpha, beta, 0, currentBest, bestMove);
@@ -356,10 +358,12 @@ uint16_t Board::search(const SearchLimits& limits)  {
                 }
 
                 if (score <= alpha) {
-                    alpha -= 200;
+                    beta = (alpha + beta) / 2;
+                    alpha -= delta;
                     if (alpha < -1000000) alpha = -1000000;
                 } else if (score >= beta) {
-                    beta += 200;
+                    alpha = (alpha + beta) / 2;
+                    beta += delta;
                     if (beta > 1000000) beta = 1000000;
                 } else {
                     prevScore = score;
@@ -367,6 +371,7 @@ uint16_t Board::search(const SearchLimits& limits)  {
                     if (currentBest != 0) bestMove = currentBest;
                     break;
                 }
+                delta += delta / 2; // Increase delta for next iteration
             }
 
             if (stopSearch) break;

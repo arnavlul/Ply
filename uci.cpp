@@ -70,12 +70,19 @@ void uciLoop(Board& myBoard) {
                 else if (sub == "ponder") myBoard.isPondering = true;
             }
             myBoard.stopSearch = false;
-            searchThread = thread([&myBoard, limits]() {
-                uint16_t bestMove = myBoard.search(limits);
-                
-                // If the search finishes while still pondering, wait for ponderhit or stop
-                while (myBoard.isPondering && !myBoard.stopSearch) {
-                    this_thread::sleep_for(chrono::milliseconds(10));
+            searchThread = thread([&myBoard, limits]() mutable {
+                uint16_t bestMove = 0;
+                while (true) {
+                    bestMove = myBoard.search(limits);
+                    
+                    if (!myBoard.isPondering) break;
+
+                    // If the search finishes while still pondering, wait for ponderhit or stop
+                    while (myBoard.isPondering && !myBoard.stopSearch) {
+                        this_thread::sleep_for(chrono::milliseconds(10));
+                    }
+
+                    if (myBoard.stopSearch) break;
                 }
 
                 uint16_t ponderMove = myBoard.getPonderMove();

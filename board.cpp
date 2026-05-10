@@ -62,10 +62,16 @@ uint64_t Board::getPolyglotHash() const {
         while (temp) {
             int sq = __builtin_ctzll(temp);
             int pt = getPieceAt(sq, true);
-            if (pt != NONE) h ^= Polyglot::RANDOM_ARRAY[64 * (2 * pt - 1) + sq];
+            if (pt != NONE) {
+                // White pieces are at odd indices: 2*(pt-1) + 1
+                h ^= Polyglot::RANDOM_ARRAY[64 * (2 * (pt - 1) + 1) + sq];
+            }
             else {
                 pt = getPieceAt(sq, false);
-                if (pt != NONE) h ^= Polyglot::RANDOM_ARRAY[64 * (2 * pt - 2) + sq];
+                if (pt != NONE) {
+                    // Black pieces are at even indices: 2*(pt-1)
+                    h ^= Polyglot::RANDOM_ARRAY[64 * (2 * (pt - 1)) + sq];
+                }
             }
             temp &= (temp - 1);
         }
@@ -309,8 +315,8 @@ uint64_t Board::getLeastValuableAttacker(int square, bool side, uint64_t& occupi
         if (square >= 7 && (square % 8 != 0) && (whitePawn & (1ULL << (square - 7)))) attackers |= (1ULL << (square - 7));
         if (square >= 9 && (square % 8 != 7) && (whitePawn & (1ULL << (square - 9)))) attackers |= (1ULL << (square - 9));
     } else { // Black attackers
-        if (square <= 56 && (square % 8 != 7) && (blackPawn & (1ULL << (square + 7)))) attackers |= (1ULL << (square + 7));
-        if (square <= 54 && (square % 8 != 0) && (blackPawn & (1ULL << (square + 9)))) attackers |= (1ULL << (square + 9));
+        if (square <= 56 && (square % 8 != 0) && (blackPawn & (1ULL << (square + 7)))) attackers |= (1ULL << (square + 7));
+        if (square <= 54 && (square % 8 != 7) && (blackPawn & (1ULL << (square + 9)))) attackers |= (1ULL << (square + 9));
     }
     if (attackers & occupied) {
         pieceType = PAWN;
