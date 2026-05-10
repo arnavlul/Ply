@@ -94,6 +94,13 @@ namespace Evaluation {
 
     const int DOUBLED_PAWN_PENALTY = 10;
     const int ISOLATED_PAWN_PENALTY = 20;
+    const int CONNECTED_PAWN_BONUS = 15;
+    const int BACKWARD_PAWN_PENALTY = 15;
+    const int UNDERMINING_BONUS = 20;
+    const int KNIGHT_OUTPOST_BONUS = 30;
+    const int PAWN_STORM_PENALTY[8] = {0, 0, 0, 10, 30, 60, 100, 0};
+    const int PAWN_STORM_BONUS[8] = {0, 0, 0, 5, 15, 30, 50, 0};
+    const int MOBILITY_BONUS[7] = {0, 0, 4, 3, 2, 1, 0}; // NONE, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING
     const int ROOK_OPEN_FILE_BONUS = 25;
     const int ROOK_SEMI_OPEN_FILE_BONUS = 15;
     const int ROOK_ON_7TH_BONUS = 20;

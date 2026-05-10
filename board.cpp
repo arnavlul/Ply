@@ -100,8 +100,9 @@ int Board::evaluate() const {
         Evaluation::Score score = {0, 0};
         int phase = 0;
 
-        uint64_t occupancy = (whitePawn | whiteKing | whiteQueen | whiteBishop | whiteKnight | whiteRook) |
-                             (blackPawn | blackKing | blackQueen | blackBishop | blackKnight | blackRook);
+        uint64_t whitePieces = whitePawn | whiteKing | whiteQueen | whiteBishop | whiteKnight | whiteRook;
+        uint64_t blackPieces = blackPawn | blackKing | blackQueen | blackBishop | blackKnight | blackRook;
+        uint64_t occupancy = whitePieces | blackPieces;
 
         // White pieces
         score += evaluatePiece(whitePawn, Evaluation::PAWN_VAL, Evaluation::pawn_pst, true);
@@ -109,19 +110,58 @@ int Board::evaluate() const {
         Evaluation::Score wN = evaluatePiece(whiteKnight, Evaluation::KNIGHT_VAL, Evaluation::knight_pst, true);
         score += wN;
         phase += __builtin_popcountll(whiteKnight) * 1;
+        uint64_t wn_temp = whiteKnight;
+        while (wn_temp) {
+            int sq = __builtin_ctzll(wn_temp);
+            int rank = sq / 8;
+            if (rank >= 3 && rank <= 5) {
+                bool supported = false;
+                if (sq % 8 > 0 && (whitePawn & (1ULL << (sq - 9)))) supported = true;
+                if (sq % 8 < 7 && (whitePawn & (1ULL << (sq - 7)))) supported = true;
+                if (supported) {
+                    if (!(blackPawn & Evaluation::passedPawnMasks[1][sq] & ~Evaluation::fileMasks[sq % 8])) {
+                        score += {Evaluation::KNIGHT_OUTPOST_BONUS, Evaluation::KNIGHT_OUTPOST_BONUS};
+                    }
+                }
+            }
+            int mob = __builtin_popcountll(knightMoveMask[sq] & ~whitePieces);
+            score += {mob * Evaluation::MOBILITY_BONUS[KNIGHT], mob * Evaluation::MOBILITY_BONUS[KNIGHT]};
+            wn_temp &= (wn_temp - 1);
+        }
 
         Evaluation::Score wB = evaluatePiece(whiteBishop, Evaluation::BISHOP_VAL, Evaluation::bishop_pst, true);
         score += wB;
         phase += __builtin_popcountll(whiteBishop) * 1;
         if (__builtin_popcountll(whiteBishop) >= 2) score += {Evaluation::BISHOP_PAIR_BONUS, Evaluation::BISHOP_PAIR_BONUS};
+        uint64_t wb_temp = whiteBishop;
+        while (wb_temp) {
+            int sq = __builtin_ctzll(wb_temp);
+            int mob = __builtin_popcountll(getBishopAttacks(sq, occupancy) & ~whitePieces);
+            score += {mob * Evaluation::MOBILITY_BONUS[BISHOP], mob * Evaluation::MOBILITY_BONUS[BISHOP]};
+            wb_temp &= (wb_temp - 1);
+        }
 
         Evaluation::Score wR = evaluatePiece(whiteRook, Evaluation::ROOK_VAL, Evaluation::rook_pst, true);
         score += wR;
         phase += __builtin_popcountll(whiteRook) * 2;
+        uint64_t wr_temp = whiteRook;
+        while (wr_temp) {
+            int sq = __builtin_ctzll(wr_temp);
+            int mob = __builtin_popcountll(getRookMoves(sq, occupancy) & ~whitePieces);
+            score += {mob * Evaluation::MOBILITY_BONUS[ROOK], mob * Evaluation::MOBILITY_BONUS[ROOK]};
+            wr_temp &= (wr_temp - 1);
+        }
 
         Evaluation::Score wQ = evaluatePiece(whiteQueen, Evaluation::QUEEN_VAL, Evaluation::queen_pst, true);
         score += wQ;
         phase += __builtin_popcountll(whiteQueen) * 4;
+        uint64_t wq_temp = whiteQueen;
+        while (wq_temp) {
+            int sq = __builtin_ctzll(wq_temp);
+            int mob = __builtin_popcountll((getBishopAttacks(sq, occupancy) | getRookMoves(sq, occupancy)) & ~whitePieces);
+            score += {mob * Evaluation::MOBILITY_BONUS[QUEEN], mob * Evaluation::MOBILITY_BONUS[QUEEN]};
+            wq_temp &= (wq_temp - 1);
+        }
 
         score += evaluatePiece(whiteKing, Evaluation::KING_VAL, Evaluation::king_pst, true);
 
@@ -131,19 +171,58 @@ int Board::evaluate() const {
         Evaluation::Score bN = evaluatePiece(blackKnight, Evaluation::KNIGHT_VAL, Evaluation::knight_pst, false);
         score -= bN;
         phase += __builtin_popcountll(blackKnight) * 1;
+        uint64_t bn_temp = blackKnight;
+        while (bn_temp) {
+            int sq = __builtin_ctzll(bn_temp);
+            int rank = sq / 8;
+            if (rank >= 2 && rank <= 4) {
+                bool supported = false;
+                if (sq % 8 > 0 && (blackPawn & (1ULL << (sq + 7)))) supported = true;
+                if (sq % 8 < 7 && (blackPawn & (1ULL << (sq + 9)))) supported = true;
+                if (supported) {
+                    if (!(whitePawn & Evaluation::passedPawnMasks[0][sq] & ~Evaluation::fileMasks[sq % 8])) {
+                        score -= {Evaluation::KNIGHT_OUTPOST_BONUS, Evaluation::KNIGHT_OUTPOST_BONUS};
+                    }
+                }
+            }
+            int mob = __builtin_popcountll(knightMoveMask[sq] & ~blackPieces);
+            score -= {mob * Evaluation::MOBILITY_BONUS[KNIGHT], mob * Evaluation::MOBILITY_BONUS[KNIGHT]};
+            bn_temp &= (bn_temp - 1);
+        }
 
         Evaluation::Score bB = evaluatePiece(blackBishop, Evaluation::BISHOP_VAL, Evaluation::bishop_pst, false);
         score -= bB;
         phase += __builtin_popcountll(blackBishop) * 1;
         if (__builtin_popcountll(blackBishop) >= 2) score -= {Evaluation::BISHOP_PAIR_BONUS, Evaluation::BISHOP_PAIR_BONUS};
+        uint64_t bb_temp = blackBishop;
+        while (bb_temp) {
+            int sq = __builtin_ctzll(bb_temp);
+            int mob = __builtin_popcountll(getBishopAttacks(sq, occupancy) & ~blackPieces);
+            score -= {mob * Evaluation::MOBILITY_BONUS[BISHOP], mob * Evaluation::MOBILITY_BONUS[BISHOP]};
+            bb_temp &= (bb_temp - 1);
+        }
 
         Evaluation::Score bR = evaluatePiece(blackRook, Evaluation::ROOK_VAL, Evaluation::rook_pst, false);
         score -= bR;
         phase += __builtin_popcountll(blackRook) * 2;
+        uint64_t br_temp = blackRook;
+        while (br_temp) {
+            int sq = __builtin_ctzll(br_temp);
+            int mob = __builtin_popcountll(getRookMoves(sq, occupancy) & ~blackPieces);
+            score -= {mob * Evaluation::MOBILITY_BONUS[ROOK], mob * Evaluation::MOBILITY_BONUS[ROOK]};
+            br_temp &= (br_temp - 1);
+        }
 
         Evaluation::Score bQ = evaluatePiece(blackQueen, Evaluation::QUEEN_VAL, Evaluation::queen_pst, false);
         score -= bQ;
         phase += __builtin_popcountll(blackQueen) * 4;
+        uint64_t bq_temp = blackQueen;
+        while (bq_temp) {
+            int sq = __builtin_ctzll(bq_temp);
+            int mob = __builtin_popcountll((getBishopAttacks(sq, occupancy) | getRookMoves(sq, occupancy)) & ~blackPieces);
+            score -= {mob * Evaluation::MOBILITY_BONUS[QUEEN], mob * Evaluation::MOBILITY_BONUS[QUEEN]};
+            bq_temp &= (bq_temp - 1);
+        }
 
         score -= evaluatePiece(blackKing, Evaluation::KING_VAL, Evaluation::king_pst, false);
 
@@ -160,22 +239,84 @@ int Board::evaluate() const {
         while (wp) {
             int sq = __builtin_ctzll(wp);
             int file = sq % 8;
+            int r = sq / 8;
             // Isolated pawns
-            if (!(whitePawn & Evaluation::adjacentFileMasks[file])) score -= {Evaluation::ISOLATED_PAWN_PENALTY, Evaluation::ISOLATED_PAWN_PENALTY};
+            if (!(whitePawn & Evaluation::adjacentFileMasks[file])) {
+                score -= {Evaluation::ISOLATED_PAWN_PENALTY, Evaluation::ISOLATED_PAWN_PENALTY};
+            } else if (!(whitePawn & Evaluation::passedPawnMasks[0][sq] & Evaluation::adjacentFileMasks[file])) {
+                // Backward pawn (not isolated, but no friendly pawns behind it on adjacent files)
+                score -= {Evaluation::BACKWARD_PAWN_PENALTY, Evaluation::BACKWARD_PAWN_PENALTY};
+            }
+
+            // Connected pawns
+            uint64_t connectedMask = 0;
+            if (file > 0) {
+                if (r > 0) connectedMask |= (1ULL << (sq - 9));
+                connectedMask |= (1ULL << (sq - 1));
+                if (r < 7) connectedMask |= (1ULL << (sq + 7));
+            }
+            if (file < 7) {
+                if (r > 0) connectedMask |= (1ULL << (sq - 7));
+                connectedMask |= (1ULL << (sq + 1));
+                if (r < 7) connectedMask |= (1ULL << (sq + 9));
+            }
+            if (whitePawn & connectedMask) {
+                score += {Evaluation::CONNECTED_PAWN_BONUS, Evaluation::CONNECTED_PAWN_BONUS};
+            }
+
+            // Undermining (attacking enemy pawns)
+            uint64_t attacks = 0;
+            if (file > 0 && r < 7) attacks |= (1ULL << (sq + 7));
+            if (file < 7 && r < 7) attacks |= (1ULL << (sq + 9));
+            if (attacks & blackPawn) {
+                score += {Evaluation::UNDERMINING_BONUS, Evaluation::UNDERMINING_BONUS};
+            }
+
             // Passed pawns
             if (!(blackPawn & Evaluation::passedPawnMasks[1][sq]))
-                score += Evaluation::passedPawnBonus[sq / 8];
+                score += Evaluation::passedPawnBonus[r];
             wp &= (wp - 1);
         }
         uint64_t bp = blackPawn;
         while (bp) {
             int sq = __builtin_ctzll(bp);
             int file = sq % 8;
+            int r = sq / 8;
             // Isolated pawns
-            if (!(blackPawn & Evaluation::adjacentFileMasks[file])) score += {Evaluation::ISOLATED_PAWN_PENALTY, Evaluation::ISOLATED_PAWN_PENALTY};
+            if (!(blackPawn & Evaluation::adjacentFileMasks[file])) {
+                score += {Evaluation::ISOLATED_PAWN_PENALTY, Evaluation::ISOLATED_PAWN_PENALTY};
+            } else if (!(blackPawn & Evaluation::passedPawnMasks[1][sq] & Evaluation::adjacentFileMasks[file])) {
+                // Backward pawn (for black, behind means ranks > r, which is passedPawnMasks[1])
+                score += {Evaluation::BACKWARD_PAWN_PENALTY, Evaluation::BACKWARD_PAWN_PENALTY};
+            }
+
+            // Connected pawns
+            uint64_t connectedMask = 0;
+            if (file > 0) {
+                if (r > 0) connectedMask |= (1ULL << (sq - 9));
+                connectedMask |= (1ULL << (sq - 1));
+                if (r < 7) connectedMask |= (1ULL << (sq + 7));
+            }
+            if (file < 7) {
+                if (r > 0) connectedMask |= (1ULL << (sq - 7));
+                connectedMask |= (1ULL << (sq + 1));
+                if (r < 7) connectedMask |= (1ULL << (sq + 9));
+            }
+            if (blackPawn & connectedMask) {
+                score -= {Evaluation::CONNECTED_PAWN_BONUS, Evaluation::CONNECTED_PAWN_BONUS};
+            }
+
+            // Undermining (attacking enemy pawns)
+            uint64_t attacks = 0;
+            if (file > 0 && r > 0) attacks |= (1ULL << (sq - 9));
+            if (file < 7 && r > 0) attacks |= (1ULL << (sq - 7));
+            if (attacks & whitePawn) {
+                score -= {Evaluation::UNDERMINING_BONUS, Evaluation::UNDERMINING_BONUS};
+            }
+
             // Passed pawns
             if (!(whitePawn & Evaluation::passedPawnMasks[0][sq]))
-                score -= Evaluation::passedPawnBonus[7 - (sq / 8)];
+                score -= Evaluation::passedPawnBonus[7 - r];
             bp &= (bp - 1);
         }
 
@@ -205,17 +346,43 @@ int Board::evaluate() const {
 
         // King Safety
         int wKingSq = __builtin_ctzll(whiteKing);
+        int wKf = wKingSq % 8;
         if (wKingSq < 24) { // Ranks 1-3
             int pawnsInShield = __builtin_popcountll(whitePawn & Evaluation::pawnShieldMasks[1][wKingSq]);
             int missingShield = std::max(0, 3 - pawnsInShield);
             score.mg -= Evaluation::shieldPenalty[missingShield];
+
+            // Pawn Storms against White King (only on flanks / castled positions)
+            if (wKf < 3 || wKf > 4) {
+                for (int f = std::max(0, wKf - 1); f <= std::min(7, wKf + 1); f++) {
+                    uint64_t bpOnF = blackPawn & Evaluation::fileMasks[f];
+                    if (bpOnF) {
+                        int rank = __builtin_ctzll(bpOnF) / 8; // Lowest rank (closest to white king)
+                        score.mg -= Evaluation::PAWN_STORM_PENALTY[7 - rank]; // Penalty to white
+                        score.mg -= Evaluation::PAWN_STORM_BONUS[7 - rank];   // Bonus to black's attack
+                    }
+                }
+            }
         }
 
         int bKingSq = __builtin_ctzll(blackKing);
+        int bKf = bKingSq % 8;
         if (bKingSq >= 40) { // Ranks 6-8
             int pawnsInShield = __builtin_popcountll(blackPawn & Evaluation::pawnShieldMasks[0][bKingSq]);
             int missingShield = std::max(0, 3 - pawnsInShield);
             score.mg += Evaluation::shieldPenalty[missingShield];
+
+            // Pawn Storms against Black King (only on flanks / castled positions)
+            if (bKf < 3 || bKf > 4) {
+                for (int f = std::max(0, bKf - 1); f <= std::min(7, bKf + 1); f++) {
+                    uint64_t wpOnF = whitePawn & Evaluation::fileMasks[f];
+                    if (wpOnF) {
+                        int rank = (63 - __builtin_clzll(wpOnF)) / 8; // Highest rank (closest to black king)
+                        score.mg += Evaluation::PAWN_STORM_PENALTY[rank]; // Penalty to black
+                        score.mg += Evaluation::PAWN_STORM_BONUS[rank];   // Bonus to white's attack
+                    }
+                }
+            }
         }
 
         // King Zone Attacks (Weighted)
